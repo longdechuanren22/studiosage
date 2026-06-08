@@ -1,0 +1,16 @@
+{
+  "name": "studiosage",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
+    "dev:server": "cd server && pnpm dev",
+    "dev:client": "cd client && pnpm dev",
+    "build": "pnpm build:client && pnpm build:server",
+    "build:server": "cd server && pnpm build",
+    "build:client": "cd client && pnpm build",
+    "start": "cd server && pnpm start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
