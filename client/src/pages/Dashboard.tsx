@@ -65,9 +65,21 @@ export default function Dashboard() {
       </div>
 
       {/* Urgent Alerts */}
+      {today.newMessages === 0 && (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+          <p className="text-sm text-gray-400 mb-3">No messages yet. Connect Gmail or load demo data:</p>
+          <button onClick={() => fetch('/api/demo/seed', { method: 'POST' }).then(r => r.json()).then(() => window.location.reload())} className="px-4 py-2 bg-sage-500 text-white text-sm rounded-full font-medium">
+            📩 Load Demo Messages
+          </button>
+          <p className="text-[10px] text-gray-400 mt-2">
+            Or connect Gmail in Settings to auto-import client emails
+          </p>
+        </div>
+      )}
+      {/* Urgent Alerts */}
       {today.urgent > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-sm font-semibold text-red-700">🔴 {today.urgent} message{today.urgent > 1 ? 's' : ''} need your attention</p>
+          <p className="text-sm font-semibold text-red-700">🔴 {today.urgent} urgent message{today.urgent > 1 ? 's' : ''} need your attention</p>
           <a href="/inbox" className="text-xs text-red-600 underline mt-1 inline-block">View in Inbox →</a>
         </div>
       )}

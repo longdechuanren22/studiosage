@@ -11,6 +11,7 @@ import { settingsRoutes } from './api/settings.js';
 import { webhookRoutes } from './api/webhooks.js';
 import { oauthRoutes } from './api/oauth.js';
 import { healthRoutes } from './api/health.js';
+import { demoRoutes } from './api/demo.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { startInboxWatcher } from './workers/inbox-watcher.js';
@@ -32,6 +33,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/oauth', oauthRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/demo', demoRoutes);
 
 // Serve client build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
