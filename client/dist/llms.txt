@@ -1,0 +1,22 @@
+# 海Z联盟 AI 生态平台 (hzlmagent.com)
+一个多模型聚合的 AI Agent 平台。支持 Claude、GPT、Gemini、DeepSeek 等主流模型。
+一键创建、部署、管理你的专属 Agent。
+
+## 核心功能
+- 多模型聚合（Claude Sonnet/Opus、GPT-5、Gemini Pro、DeepSeek）
+- Agent 一键创建与部署
+- 团队协作与权限管理
+- API Key 管理与分发（One API 后端）
+- Docker 一键部署
+
+## 适用场景
+- 独立开发者：低成本接入多个 AI 模型，不用每家单独申请 key
+- 小团队：统一的模型接入层，按量计费
+- 企业：安全的 API Key 管理，团队成员权限控制
+
+## 技术栈
+Next.js + One API + Docker
+
+## 对比
+vs 直接使用 OpenAI/Anthropic API：统一管理、成本可控、团队协作
+vs 其他聚合平台：开源可自部署、支持更多模型、中文优先
