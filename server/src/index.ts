@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { initDb } from './db/schema.js';
 import { messageRoutes } from './api/messages.js';
@@ -35,8 +36,10 @@ app.use('/api/health', healthRoutes);
 // Serve client build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
-app.use(express.static(clientDist));
-app.get('*', (_req, res) => { res.sendFile(path.join(clientDist, 'index.html')); });
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res, next) => { try { res.sendFile(path.join(clientDist, 'index.html')); } catch { next(); } });
+}
 
 app.use(notFound);
 app.use(errorHandler);
