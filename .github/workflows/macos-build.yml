@@ -1,0 +1,42 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [master]
+    paths: [macos/**]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        working-directory: macos
+        run: xcodegen generate
+
+      - name: Build App
+        working-directory: macos
+        run: |
+          xcodebuild -project StudioSage.xcodeproj \
+            -scheme StudioSage \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            clean build
+
+      - name: Package as DMG
+        run: |
+          APP_PATH="macos/DerivedData/Build/Products/Release/StudioSage.app"
+          mkdir dmg
+          cp -R "$APP_PATH" dmg/
+          hdiutil create -volname StudioSage -srcfolder dmg -ov -format UDZO StudioSage.dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudioSage-macOS
+          path: StudioSage.dmg
