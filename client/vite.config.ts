@@ -18,5 +18,6 @@ export default defineConfig({
       },
     }),
   ],
+  base: '/sage/',
   server: { proxy: { '/api': 'http://localhost:3001' } },
 });
