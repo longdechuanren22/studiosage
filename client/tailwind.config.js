@@ -4,10 +4,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        sage: { 50: '#F0FDFA', 500: '#0F766E', 700: '#115E59' },
-        amber: { 500: '#D97706' },
-        warm: { 50: '#FAFAF9', 900: '#1C1917' },
+        apple: {
+          bg: '#F5F5F7',
+          card: '#FFFFFF',
+          dark: '#1C1C1E',
+          text: '#1D1D1F',
+          secondary: '#86868B',
+          border: '#E5E5EA',
+          blue: '#007AFF',
+          red: '#FF3B30',
+          green: '#34C759',
+          orange: '#FF9500',
+        },
       },
+      fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"SF Pro Text"', 'sans-serif'] },
     },
   },
   plugins: [],
