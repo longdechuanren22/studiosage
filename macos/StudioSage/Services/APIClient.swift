@@ -34,7 +34,7 @@ final class APIClient: Sendable {
     func sendReply(id: String) async throws {
         var req = URLRequest(url: URL(string: "\(baseURL)/api/messages/\(id)/reply")!)
         req.httpMethod = "POST"; req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try encoder.encode(["customText": NSNull()])
+        req.httpBody = try encoder.encode(["customText": Optional<String>.none as Any])
         _ = try await session.data(for: req)
     }
 
@@ -46,7 +46,7 @@ final class APIClient: Sendable {
     func generateInvoice(client: String, email: String, pkg: String, amount: Double, schedule: String) async throws -> Invoice {
         var req = URLRequest(url: URL(string: "\(baseURL)/api/invoices/generate")!)
         req.httpMethod = "POST"; req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try encoder.encode(["clientName": client, "clientEmail": email, "packageType": pkg, "amount": amount, "paymentSchedule": schedule])
+        req.httpBody = try encoder.encode(["clientName": client, "clientEmail": email, "packageType": pkg, "amount": String(amount), "paymentSchedule": schedule])
         let (data, _) = try await session.data(for: req)
         return try decoder.decode(Invoice.self, from: data)
     }
