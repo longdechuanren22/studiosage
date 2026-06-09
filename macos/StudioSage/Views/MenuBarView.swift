@@ -19,8 +19,8 @@ struct MenuBarView: View {
             }
             Label("\(app.dashboard?.today.autoReplied ?? 0) auto-replied", systemImage: "checkmark.circle")
             Divider()
-            Button("Open Dashboard") { NSApp.openWindow(id: "dashboard") }
-            Button("Settings...") { NSApp.openSettings() }
+            Button("Open Dashboard") { NSApp.activate(ignoringOtherApps: true); NSApp.windows.first?.makeKeyAndOrderFront(nil) }
+            Button("Settings...") { NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) }
             Divider()
             Button("Quit") { NSApp.terminate(nil) }
         }
