@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CC Switch · 模型切换面板</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.container{max-width:640px;margin:0 auto;padding:24px}
+h1{font-size:1.5rem;margin-bottom:4px}
+h1 span{color:#38bdf8}
+.sub{color:#94a3b8;font-size:.85rem;margin-bottom:24px}
+.card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #334155}
+.card h2{font-size:1rem;margin-bottom:12px;color:#f1f5f9}
+.status-row{display:flex;gap:12px;margin-bottom:12px}
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:500}
+.status-badge.online{background:#065f46;color:#6ee7b7}
+.status-badge.offline{background:#7f1d1d;color:#fca5a5}
+input,select{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font-size:.9rem;margin-bottom:8px}
+input:focus{outline:none;border-color:#38bdf8}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 20px;border-radius:8px;border:none;font-size:.9rem;font-weight:500;cursor:pointer;transition:all .2s}
+.btn-primary{background:#0284c7;color:#fff;width:100%}
+.btn-primary:hover{background:#0369a1}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover{background:#b91c1c}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+.btn-outline{background:transparent;border:1px solid #475569;color:#e2e8f0}
+.btn-outline:hover{background:#1e293b}
+.provider-list{display:flex;flex-direction:column;gap:8px}
+.provider-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#0f172a;border-radius:8px;border:1px solid #334155}
+.provider-item.active{border-color:#38bdf8;background:#0c1929}
+.provider-item .name{font-weight:500}
+.provider-item .actions{display:flex;gap:6px}
+.current-info{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#0f172a;border-radius:8px;margin-top:8px}
+.current-info .label{color:#94a3b8;font-size:.8rem}
+.current-info .value{font-weight:600;color:#38bdf8}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>CC <span>Switch</span></h1>
+  <p class="sub">模型切换面板 · DeepSeek / GLM / Kimi / 自定义中转站</p>
+
+  <div class="card">
+    <h2>📊 状态</h2>
+    <div class="status-row">
+      <span id="ccsStatus" class="status-badge offline">⬜ CLI 未安装</span>
+      <span id="ccStatus" class="status-badge offline">⬜ Claude Code</span>
+    </div>
+    <div id="currentProvider" class="current-info">
+      <span class="label">当前模型</span>
+      <span class="value">未配置</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>➕ 添加 Provider</h2>
+    <input id="provName" placeholder="名称 (如: deepseek / relay / zhipu)">
+    <input id="provUrl" placeholder="API URL (如: https://api.deepseek.com/v1)">
+    <input id="provKey" placeholder="API Key" type="password">
+    <input id="provModel" placeholder="模型名 (如: deepseek-chat)">
+    <button class="btn btn-primary" onclick="addProvider()">添加 Provider</button>
+  </div>
+
+  <div class="card">
+    <h2>🔀 已配置的 Provider</h2>
+    <div id="provList" class="provider-list">加载中...</div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:3099';
+
+async function load() {
+  try {
+    const [status, providers] = await Promise.all([
+      fetch(API + '/api/status').then(r => r.json()),
+      fetch(API + '/api/providers').then(r => r.json()),
+    ]);
+    document.getElementById('ccsStatus').className = 'status-badge ' + (status.cli ? 'online' : 'offline');
+    document.getElementById('ccsStatus').innerHTML = (status.cli ? '🟢 CLI 就绪' : '⬜ CLI 未安装');
+    document.getElementById('ccStatus').className = 'status-badge ' + (status.claudeCode ? 'online' : 'offline');
+    document.getElementById('ccStatus').innerHTML = (status.claudeCode ? '🟢 已配置' : '⬜ 未配置');
+    const cur = document.getElementById('currentProvider');
+    if (providers.current) {
+      cur.querySelector('.value').textContent = '🟢 ' + providers.current;
+    } else {
+      cur.querySelector('.value').textContent = '未配置';
+    }
+    const list = document.getElementById('provList');
+    if (providers.providers.length === 0) {
+      list.innerHTML = '<div style="color:#94a3b8;font-size:.85rem">暂无 Provider，请添加</div>';
+    } else {
+      list.innerHTML = providers.providers.map(p => `
+        <div class="provider-item ${p === providers.current ? 'active' : ''}">
+          <span class="name">${p === providers.current ? '🟢 ' : ''}${p}</span>
+          <div class="actions">
+            <button class="btn btn-sm btn-outline" onclick="switchTo('${p}')">切换</button>
+            <button class="btn btn-sm btn-danger" onclick="removeProvider('${p}')">删除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    document.getElementById('provList').innerHTML = '<div style="color:#fca5a5">❌ 无法连接面板服务 (localhost:3099)</div>';
+  }
+}
+
+async function addProvider() {
+  const name = document.getElementById('provName').value.trim();
+  const url = document.getElementById('provUrl').value.trim();
+  const key = document.getElementById('provKey').value.trim();
+  const model = document.getElementById('provModel').value.trim();
+  if (!name || !key) return alert('名称和 API Key 必填');
+  await fetch(API + '/api/providers', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, url: url || 'https://api.deepseek.com/v1', key, model: model || 'deepseek-chat' })
+  });
+  load();
+}
+
+async function switchTo(provider) {
+  await fetch(API + '/api/switch', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ provider })
+  });
+  load();
+}
+
+async function removeProvider(provider) {
+  if (!confirm('删除 ' + provider + '？')) return;
+  await fetch(API + '/api/providers/' + provider, { method: 'DELETE' });
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
