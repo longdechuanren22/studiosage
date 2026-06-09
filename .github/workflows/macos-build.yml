@@ -12,30 +12,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode Project
-        working-directory: macos
-        run: xcodegen generate
-
-      - name: Build App
+      - name: Build Swift App
         working-directory: macos
         run: |
-          xcodebuild -project StudioSage.xcodeproj \
-            -scheme StudioSage \
-            -configuration Release \
-            -derivedDataPath DerivedData \
-            clean build
+          swiftc -target arm64-apple-macos14.0 \
+            -o StudioSage \
+            StudioSage/Models/Message.swift \
+            StudioSage/Services/APIClient.swift \
+            StudioSage/Services/NotificationService.swift \
+            StudioSage/AppState.swift \
+            StudioSage/Views/MenuBarView.swift \
+            StudioSage/Views/DashboardView.swift \
+            StudioSage/Views/InboxView.swift \
+            StudioSage/Views/MessageRow.swift \
+            StudioSage/Views/InvoiceListView.swift \
+            StudioSage/Views/SettingsView.swift \
+            StudioSage/StudioSageApp.swift \
+            -framework SwiftUI -framework AppKit -framework UserNotifications
 
-      - name: Verify App
-        run: |
-          APP_PATH="macos/DerivedData/Build/Products/Release/StudioSage.app"
-          ls -la "$APP_PATH/Contents/MacOS/"
-          echo "BUILD SUCCESS"
+      - name: Verify
+        run: ls -la macos/StudioSage && echo "BUILD SUCCESS"
 
-      - name: Upload App
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
           name: StudioSage-macOS
-          path: macos/DerivedData/Build/Products/Release/StudioSage.app
+          path: macos/StudioSage
