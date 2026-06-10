@@ -1,77 +1,105 @@
 import { useState, useEffect } from 'react';
+import { useDemo } from '../components/Layout';
 
 interface Message {
   id: string;
-  from_address: string;
-  subject: string;
-  body: string;
+  from_address: string; subject: string; body: string;
   category: 'urgent' | 'normal' | 'spam';
   status: 'pending' | 'replied' | 'archived';
-  ai_reply: string;
-  client_name?: string;
-  client_stage?: string;
-  created_at: string;
+  ai_reply: string; client_name?: string; client_stage?: string; created_at: string;
 }
 
+const DEMO_MESSAGES: Message[] = [
+  { id:'1', from_address:'sarah.mike@email.com', subject:'Wedding inquiry', body:'"Emma 你好！想问一下——婚礼当天可以多加 2 个小时吗？还有你们提供冲印服务吗？"', category:'urgent', status:'pending', ai_reply:'"Sarah & Mike，很高兴收到你们的消息！当然可以多加 2 小时，额外费用 $400。冲印 8×10 每张 $25 起。需要我把冲印目录发给你们吗？"', client_name:'Sarah & Mike', client_stage:'booking', created_at: new Date(Date.now()-120000).toISOString() },
+  { id:'2', from_address:'david.l@email.com', subject:'Gallery timeline', body:'"相册还要多久能好？"', category:'normal', status:'pending', ai_reply:'"David 你好，你的相册将在 2–3 周内准备好。要不要先给你发几张抢先看？"', client_name:'David L.', client_stage:'editing', created_at: new Date(Date.now()-3600000).toISOString() },
+  { id:'3', from_address:'jennifer@email.com', subject:'Photo ready?', body:'"照片好了吗？"', category:'normal', status:'replied', ai_reply:'"您的照片将在 3–5 个工作日内准备好……"', client_name:'Jennifer K.', client_stage:'delivery', created_at: new Date(Date.now()-10800000).toISOString() },
+];
+
+const colors = ['#FF3B30','#007AFF','#FF9500','#34C759','#AF52DE'];
+
 export default function Inbox() {
+  const { demo } = useDemo();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [filter, setFilter] = useState<'all' | 'urgent' | 'normal'>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all'|'urgent'|'normal'>('all');
+  const [expandedId, setExpandedId] = useState<string|null>(null);
 
   useEffect(() => {
-    fetch('/api/messages/inbox').then(r => r.json()).then(setMessages);
-  }, []);
+    if (demo) { setMessages(DEMO_MESSAGES); return; }
+    fetch('/api/messages/inbox').then(r=>r.json()).then(setMessages).catch(()=>setMessages(DEMO_MESSAGES));
+  }, [demo]);
 
-  const filtered = filter === 'all' ? messages : messages.filter(m => m.category === filter);
+  const filtered = filter==='all' ? messages : messages.filter(m=>m.category===filter);
 
-  const handleReply = async (id: string) => {
-    await fetch(`/api/messages/${id}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    setMessages(msgs => msgs.map(m => m.id === id ? { ...m, status: 'replied' } : m));
+  const handleReply = (id: string) => {
+    setMessages(msgs => msgs.map(m => m.id===id ? {...m, status:'replied'} : m));
   };
 
   return (
-    <div className="space-y-3">
-      {/* Filter Tabs */}
-      <div className="flex gap-2">
-        {(['all', 'urgent', 'normal'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-              filter === f ? 'bg-sage-500 text-white' : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            {f === 'all' ? 'All' : f === 'urgent' ? '🔴 Urgent' : '🟡 Normal'}
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div>
+        <h2 style={{ fontSize:26, fontWeight:800, letterSpacing:'-.5px', margin:0 }}>收件箱</h2>
+        <p style={{ fontSize:14, color:'#86868B', margin:'4px 0 0' }}>3 条未读 · 共 12 个对话</p>
+      </div>
+
+      {/* Filter chips */}
+      <div style={{ display:'flex', gap:6 }}>
+        {(['all','urgent','normal'] as const).map(f => (
+          <button key={f} onClick={()=>setFilter(f)} style={{
+            padding:'6px 14px', borderRadius:16, fontSize:12, fontWeight:600, cursor:'pointer', border:'.5px solid transparent',
+            background: filter===f ? '#007AFF' : 'rgba(0,0,0,.03)', color: filter===f ? '#fff' : '#86868B',
+            letterSpacing:'-.1px', transition:'all .12s',
+          }}>
+            {f==='all'?'全部':f==='urgent'?'🔴 紧急':'🟡 普通'}
           </button>
         ))}
       </div>
 
-      {/* Message List */}
-      {filtered.length === 0 && <p className="text-center py-10 text-gray-400 text-sm">No messages</p>}
+      {filtered.length===0 && (
+        <div style={{ textAlign:'center', padding:48, background:'#fff', borderRadius:16 }}>
+          <div style={{ fontSize:36, marginBottom:8, opacity:.6 }}>✓</div>
+          <p style={{ fontSize:15, fontWeight:700 }}>没有消息</p>
+          <p style={{ fontSize:13, color:'#86868B' }}>全部处理完毕</p>
+        </div>
+      )}
 
-      {filtered.map(msg => (
-        <div key={msg.id} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100" onClick={() => setExpandedId(expandedId === msg.id ? null : msg.id)}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                {msg.category === 'urgent' && <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Urgent</span>}
-                <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleTimeString()}</span>
-                {msg.client_stage && <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">{msg.client_stage}</span>}
+      {filtered.map((msg, i) => (
+        <div key={msg.id} onClick={()=>setExpandedId(expandedId===msg.id?null:msg.id)} style={{
+          background:'#fff', borderRadius:16, padding:'16px 18px', cursor:'pointer',
+          boxShadow:'0 1px 3px rgba(0,0,0,.04)', borderLeft: msg.category==='urgent'?'3px solid #FF3B30':'1px solid rgba(0,0,0,.04)',
+          opacity: msg.status==='replied'?.5:1, transition:'all .15s',
+        }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+            {/* Avatar */}
+            <div style={{
+              width:40, height:40, borderRadius:'50%', flexShrink:0,
+              background:`linear-gradient(135deg,${colors[i%5]},${colors[i%5]}88)`,
+              display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:16, fontWeight:700,
+            }}>{(msg.client_name||msg.from_address)[0]}</div>
+            {/* Info */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:15, fontWeight:600, letterSpacing:'-.1px' }}>{msg.client_name||msg.from_address}</span>
+                <span style={{ fontSize:12, color:'#AEAEB2' }}>{new Date(msg.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
               </div>
-              <p className="text-sm font-medium mt-1 truncate">{msg.client_name || msg.from_address}</p>
-              <p className="text-xs text-gray-500 truncate">{msg.body.slice(0, 80)}</p>
+              <p style={{ fontSize:13, color:'#86868B', margin:'2px 0', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{msg.body}</p>
+              <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                {msg.category==='urgent' && <span style={{ fontSize:10, fontWeight:600, color:'#FF3B30', background:'rgba(255,59,48,.08)', padding:'1px 6px', borderRadius:6 }}>紧急</span>}
+                {msg.status==='replied' && <span style={{ fontSize:12, fontWeight:500, color:'#34C759' }}>✓ 已回复</span>}
+                {msg.status==='pending' && <span style={{ fontSize:10, fontWeight:600, color:'#007AFF', background:'rgba(0,122,255,.08)', padding:'1px 6px', borderRadius:6 }}>待处理</span>}
+              </div>
             </div>
-            {msg.status === 'replied' && <span className="text-xs text-green-600 flex-shrink-0 ml-2">✅ Replied</span>}
           </div>
 
-          {/* Expanded: AI Reply */}
-          {expandedId === msg.id && (
-            <div className="mt-3 pt-3 border-t border-gray-100" onClick={e => e.stopPropagation()}>
-              <p className="text-[11px] text-gray-400 mb-1">💬 Suggested reply:</p>
-              <p className="text-sm text-gray-700 bg-sage-50 rounded-lg p-2">{msg.ai_reply}</p>
-              <div className="flex gap-2 mt-2">
-                <button onClick={() => handleReply(msg.id)} className="px-4 py-1.5 bg-sage-500 text-white text-xs rounded-full font-medium">📤 Send</button>
-                <button className="px-4 py-1.5 bg-gray-100 text-gray-600 text-xs rounded-full">✏️ Edit</button>
+          {/* Expanded AI reply */}
+          {expandedId===msg.id && msg.status!=='replied' && (
+            <div style={{ marginTop:14, paddingTop:14, borderTop:'.5px solid rgba(0,0,0,.06)' }} onClick={e=>e.stopPropagation()}>
+              <div style={{ background:'rgba(0,122,255,.04)', borderRadius:8, padding:'12px 14px', fontSize:13, color:'rgba(0,122,255,.9)', lineHeight:1.5, marginBottom:10, border:'.5px solid rgba(0,122,255,.08)' }}>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.6px', color:'rgba(0,122,255,.5)', marginBottom:4 }}>AI 建议回复</div>
+                {msg.ai_reply}
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={()=>handleReply(msg.id)} style={{ padding:'7px 16px', borderRadius:20, fontSize:12, fontWeight:600, background:'#007AFF', color:'#fff', border:'none', cursor:'pointer', letterSpacing:'-.1px' }}>发送回复</button>
+                <button style={{ padding:'7px 16px', borderRadius:20, fontSize:12, fontWeight:600, background:'transparent', color:'#007AFF', border:'none', cursor:'pointer' }}>编辑</button>
               </div>
             </div>
           )}

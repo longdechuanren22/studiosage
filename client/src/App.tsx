@@ -11,16 +11,16 @@ import Connect from './pages/Connect';
 export default function App() {
   return (
     <ErrorBoundary>
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/inbox" element={<Inbox />} />
-        <Route path="/invoices" element={<Invoices />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="/connect" element={<Connect />} />
-      </Routes>
-    </Layout>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/inbox" element={<Inbox />} />
+          <Route path="/invoices" element={<Invoices />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/connect" element={<Connect />} />
+        </Routes>
+      </Layout>
     </ErrorBoundary>
   );
 }

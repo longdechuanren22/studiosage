@@ -3,185 +3,707 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StudioSage · macOS App Preview</title>
+<title>StudioSage</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-  *{margin:0;padding:0;box-sizing:border-box}
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --blue:#007AFF;--green:#34C759;--red:#FF3B30;--orange:#FF9500;--purple:#AF52DE;
+    --text:#1d1d1f;--text2:#6e6e73;--text3:#aeaeb2;
+    --bg:#f5f5f7;--card:#ffffff;--sidebar-bg:rgba(245,245,247,.72);
+    --divider:rgba(0,0,0,.06);
+    --shadow-sm:0 1px 3px rgba(0,0,0,.04);--shadow-md:0 4px 12px rgba(0,0,0,.06);
+    --shadow-lg:0 20px 60px rgba(0,0,0,.12);
+    --radius-sm:8px;--radius-md:12px;--radius-lg:18px;--radius-xl:24px;
+  }
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Inter",sans-serif;
-    background:#1E1E2E;color:#CDD6F4;display:flex;justify-content:center;align-items:center;
-    min-height:100vh;padding:40px;-webkit-font-smoothing:antialiased;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif;
+    background:linear-gradient(160deg,#e8e6f0 0%,#f0eff5 20%,#f5f5f7 50%,#f0eef4 80%,#e4e2ec 100%);
+    color:var(--text);display:flex;justify-content:center;align-items:center;
+    min-height:100vh;padding:60px 40px 40px;-webkit-font-smoothing:antialiased;
   }
+  .bg-pattern{
+    position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(ellipse 80% 60% at 30% 20%,rgba(0,122,255,.04) 0%,transparent 60%),
+               radial-gradient(ellipse 60% 50% at 80% 70%,rgba(175,82,222,.03) 0%,transparent 60%),
+               radial-gradient(ellipse 50% 40% at 50% 50%,rgba(255,149,0,.02) 0%,transparent 50%);
+  }
+
   .app-frame{
-    background:#1C1C1E;border-radius:16px;overflow:hidden;width:840px;
-    box-shadow:0 25px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.05);
+    position:relative;z-index:1;width:960px;
+    background:rgba(255,255,255,.64);backdrop-filter:blur(40px) saturate(180%);
+    -webkit-backdrop-filter:blur(40px) saturate(180%);
+    border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.04),0 8px 32px rgba(0,0,0,.08),0 0 0 .5px rgba(0,0,0,.08);
+    overflow:hidden;display:flex;flex-direction:column;
   }
+
+  /* Titlebar */
   .titlebar{
-    height:38px;background:#2C2C2E;display:flex;align-items:center;padding:0 16px;gap:8px;
+    height:48px;display:flex;align-items:center;padding:0 20px;gap:12px;
+    background:rgba(255,255,255,.4);border-bottom:.5px solid rgba(0,0,0,.06);
+    user-select:none;
   }
-  .dot{width:12px;height:12px;border-radius:50%}
-  .dot.red{background:#FF5F57}.dot.yellow{background:#FEBc2E}.dot.green{background:#28C840}
-  .titlebar .title{flex:1;text-align:center;font-size:13px;font-weight:500;color:#98989D}
+  .traffic-lights{display:flex;gap:8px;align-items:center}
+  .dot{width:12px;height:12px;border-radius:50%;cursor:pointer;transition:all .15s;position:relative}
+  .dot:hover::after{content:'';position:absolute;inset:-3px;border-radius:50%;background:rgba(0,0,0,.08)}
+  .dot.red{background:#FF5F57}.dot.red:hover::after{background:rgba(0,0,0,.12)}
+  .dot.yellow{background:#FEBc2E}.dot.yellow:hover::after{background:rgba(0,0,0,.12)}
+  .dot.green{background:#28C840}.dot.green:hover::after{background:rgba(0,0,0,.12)}
+  .titlebar .title{
+    flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--text2);
+    letter-spacing:-.1px;
+  }
+  .lang-toggle{
+    font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;
+    padding:4px 10px;border-radius:6px;transition:all .12s;user-select:none;
+    letter-spacing:-.1px;
+  }
+  .lang-toggle:hover{background:rgba(0,0,0,.04);color:var(--text)}
 
-  .app-body{display:flex;min-height:500px}
-  .sidebar{width:220px;background:#1C1C1E;border-right:1px solid #2C2C2E;padding:20px 0}
-  .sidebar .section{padding:8px 16px;font-size:11px;font-weight:600;color:#98989D;text-transform:uppercase;letter-spacing:.5px}
-  .sidebar .item{display:flex;align-items:center;gap:10px;padding:6px 16px;font-size:13px;color:#CDD6F4;border-radius:0;margin:1px 8px}
-  .sidebar .item:hover{background:#2C2C2E}
-  .sidebar .item.active{background:#007AFF;color:#fff}
-  .sidebar .item .icon{font-size:15px;width:20px;text-align:center}
-  .sidebar .badge{background:#FF3B30;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto}
+  /* Body */
+  .app-body{display:flex;flex:1;min-height:560px;background:transparent}
 
-  .content{flex:1;padding:24px;overflow-y:auto}
-  .greeting{font-size:22px;font-weight:700;margin-bottom:4px}
-  .subtitle{font-size:13px;color:#98989D;margin-bottom:24px}
+  /* Sidebar */
+  .sidebar{
+    width:240px;background:rgba(245,245,247,.56);backdrop-filter:blur(20px) saturate(180%);
+    -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border-right:.5px solid rgba(0,0,0,.06);display:flex;flex-direction:column;
+    padding:8px 12px 16px;
+  }
+  .sidebar .sd-section{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;
+    letter-spacing:.8px;padding:16px 10px 6px}
+  .sidebar .sd-item{
+    display:flex;align-items:center;gap:10px;padding:6px 10px;margin:1px 0;
+    font-size:13px;font-weight:500;color:var(--text2);border-radius:7px;
+    cursor:pointer;transition:all .12s;user-select:none;letter-spacing:-.1px;min-height:30px;
+  }
+  .sidebar .sd-item:hover{background:rgba(0,0,0,.04);color:var(--text)}
+  .sidebar .sd-item.active{background:rgba(0,122,255,.1);color:var(--blue);font-weight:600}
+  .sidebar .sd-item .sd-icon{font-size:16px;width:22px;text-align:center;opacity:.85}
+  .sidebar .sd-item.active .sd-icon{opacity:1}
+  .sidebar .sd-badge{
+    background:var(--red);color:#fff;font-size:10px;font-weight:600;padding:1px 6px;
+    border-radius:9px;margin-left:auto;min-width:18px;text-align:center;line-height:16px;
+  }
+  .sidebar .sd-spacer{flex:1}
+  .sidebar .sd-user{
+    display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+    background:rgba(0,0,0,.02);
+  }
+  .sd-user .avatar{
+    width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#007AFF,#5856D6);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;
+  }
+  .sd-user .info{font-size:12px}
+  .sd-user .info .name{font-weight:600;color:var(--text);letter-spacing:-.1px}
+  .sd-user .info .plan{font-size:10px;color:var(--text2)}
 
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
-  .stat-card{background:#2C2C2E;border-radius:12px;padding:16px;text-align:center}
-  .stat-card .value{font-size:28px;font-weight:700}
-  .stat-card .label{font-size:11px;color:#98989D;margin-top:4px}
-  .stat-card .value.blue{color:#007AFF}
-  .stat-card .value.green{color:#34C759}
-  .stat-card .value.red{color:#FF3B30}
-  .stat-card .value.orange{color:#FF9500}
+  /* Content */
+  .content{flex:1;overflow-y:auto;max-height:560px;position:relative}
+  .content::-webkit-scrollbar{width:6px}
+  .content::-webkit-scrollbar-track{background:transparent}
+  .content::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:3px}
+  .page{display:none;padding:32px 36px;animation:pageIn .25s cubic-bezier(.4,0,.2,1)}
+  .page.active{display:block}
+  @keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-  .msg-card{background:#2C2C2E;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid transparent}
-  .msg-card.urgent{border-color:#FF3B30;background:rgba(255,59,48,.05)}
-  .msg-card .msg-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  .msg-card .msg-from{font-weight:600;font-size:14px}
-  .msg-card .msg-time{font-size:11px;color:#98989D}
-  .msg-card .msg-body{font-size:13px;color:#98989D;margin-bottom:10px}
-  .msg-card .ai-reply{background:rgba(0,122,255,.08);border-radius:8px;padding:10px 12px;font-size:13px;color:#7AAEFF;margin-bottom:10px}
-  .msg-card .actions{display:flex;gap:8px}
-  .btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none}
-  .btn-primary{background:#007AFF;color:#fff}
-  .btn-secondary{background:#3A3A3C;color:#CDD6F4}
-  .btn-primary:hover{background:#0066D6}
+  .pg-title{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px;color:var(--text)}
+  .pg-sub{font-size:14px;color:var(--text2);margin-bottom:28px;letter-spacing:-.1px;line-height:1.5}
 
-  .section-title{font-size:13px;font-weight:600;color:#98989D;margin:20px 0 10px}
+  /* Stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+  .stat-card{
+    background:var(--card);border-radius:var(--radius-lg);padding:18px 16px;
+    box-shadow:var(--shadow-sm);cursor:pointer;transition:all .2s cubic-bezier(.4,0,.2,1);
+    border:.5px solid transparent;text-align:center;
+  }
+  .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+  .stat-card .val{font-size:32px;font-weight:800;letter-spacing:-.5px;margin-bottom:2px}
+  .stat-card .lbl{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+  .stat-card .val.blue{color:var(--blue)}.stat-card .val.green{color:var(--green)}
+  .stat-card .val.red{color:var(--red)}.stat-card .val.orange{color:var(--orange)}
 
-  .bottom-bar{display:flex;justify-content:space-around;padding:12px;border-top:1px solid #2C2C2E}
-  .bottom-bar .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:#98989D;cursor:pointer}
-  .bottom-bar .tab.active{color:#007AFF}
-  .bottom-bar .tab .tab-icon{font-size:18px}
+  /* Section */
+  .section-label{
+    font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+    letter-spacing:.6px;margin-bottom:10px;margin-top:8px;
+  }
 
-  .menu-bar-popup{position:fixed;top:0;right:20px;width:300px;background:#2C2C2E;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:16px;z-index:100;display:none}
-  .menu-bar-popup .menu-stats{display:flex;gap:12px;margin-bottom:12px}
-  .menu-bar-popup .menu-stat{text-align:center}
-  .menu-bar-popup .menu-stat .val{font-size:20px;font-weight:700}
-  .menu-bar-popup .menu-stat .lbl{font-size:10px;color:#98989D}
-  .menu-bar-popup .menu-divider{border-top:1px solid #3A3A3C;margin:12px 0}
-  .menu-bar-popup .menu-link{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;color:#CDD6F4;cursor:pointer}
-  .menu-bar-popup .menu-link:hover{background:#3A3A3C}
+  /* Message card */
+  .msg-card{
+    background:var(--card);border-radius:var(--radius-lg);padding:18px 20px;
+    margin-bottom:10px;box-shadow:var(--shadow-sm);transition:all .2s cubic-bezier(.4,0,.2,1);
+    border:.5px solid rgba(0,0,0,.04);position:relative;
+  }
+  .msg-card:hover{box-shadow:var(--shadow-md)}
+  .msg-card.urgent{border-left:3px solid var(--red);box-shadow:var(--shadow-sm),inset 0 0 0 1px rgba(255,59,48,.06)}
+  .msg-card .msg-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+  .msg-card .msg-from{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.1px}
+  .msg-card .msg-stage{font-size:11px;font-weight:500;color:var(--text3);margin-left:8px}
+  .msg-card .msg-time{font-size:12px;color:var(--text3);white-space:nowrap}
+  .msg-card .msg-body{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px}
+  .msg-card .ai-block{
+    background:rgba(0,122,255,.04);border-radius:var(--radius-sm);padding:12px 14px;
+    font-size:13px;color:rgba(0,122,255,.9);line-height:1.5;margin-bottom:12px;
+    border:.5px solid rgba(0,122,255,.08);
+  }
+  .msg-card .ai-block .ai-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;color:rgba(0,122,255,.6)}
+  .msg-card .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .btn{
+    padding:7px 16px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;
+    border:none;transition:all .15s cubic-bezier(.4,0,.2,1);letter-spacing:-.1px;user-select:none;
+  }
+  .btn-primary{background:var(--blue);color:#fff}
+  .btn-primary:hover{background:#0066D6;transform:scale(1.02)}
+  .btn-secondary{background:rgba(0,0,0,.04);color:var(--text)}
+  .btn-secondary:hover{background:rgba(0,0,0,.08)}
+  .btn-ghost{background:transparent;color:var(--blue);padding:7px 12px}
+  .btn-ghost:hover{background:rgba(0,122,255,.06)}
+  .btn:active{transform:scale(.97)}
+
+  .sent-badge{
+    display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;
+    color:var(--green);padding:6px 0;
+  }
+
+  /* Inbox */
+  .filter-bar{display:flex;gap:6px;margin-bottom:20px}
+  .filter-chip{
+    padding:6px 14px;border-radius:16px;font-size:12px;font-weight:600;cursor:pointer;
+    background:rgba(0,0,0,.03);color:var(--text2);border:.5px solid transparent;
+    transition:all .12s;letter-spacing:-.1px;user-select:none;
+  }
+  .filter-chip:hover{background:rgba(0,0,0,.06);color:var(--text)}
+  .filter-chip.active{background:var(--blue);color:#fff;border-color:transparent}
+
+  /* Invoices */
+  .invoice-row{
+    display:flex;align-items:center;padding:14px 18px;background:var(--card);
+    border-radius:var(--radius-md);margin-bottom:6px;cursor:pointer;
+    box-shadow:var(--shadow-sm);transition:all .15s cubic-bezier(.4,0,.2,1);
+  }
+  .invoice-row:hover{transform:translateX(3px);box-shadow:var(--shadow-md)}
+  .inv-id{font-weight:700;font-size:13px;width:100px;color:var(--text);letter-spacing:-.1px}
+  .inv-client{flex:1;font-size:13px;color:var(--text2)}
+  .inv-amount{font-weight:700;font-size:14px;margin-right:14px;color:var(--text)}
+  .inv-badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:12px;text-transform:uppercase;letter-spacing:.4px}
+  .inv-badge.draft{background:rgba(255,149,0,.1);color:var(--orange)}
+  .inv-badge.paid{background:rgba(52,199,89,.1);color:var(--green)}
+
+  /* Settings */
+  .setting-group{margin-bottom:18px}
+  .setting-group .sg-title{
+    font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;
+    letter-spacing:.8px;margin-bottom:8px;padding-left:2px;
+  }
+  .setting-row{
+    display:flex;align-items:center;justify-content:space-between;padding:11px 14px;
+    background:var(--card);border-radius:var(--radius-sm);margin-bottom:2px;
+    box-shadow:var(--shadow-sm);border:.5px solid rgba(0,0,0,.03);
+  }
+  .setting-row .sr-label{font-size:13px;font-weight:600;color:var(--text);letter-spacing:-.1px}
+  .setting-row .sr-hint{font-size:11px;color:var(--text2);margin-top:1px}
+  .toggle-track{
+    width:44px;height:24px;background:rgba(0,0,0,.12);border-radius:12px;cursor:pointer;
+    position:relative;transition:background .25s cubic-bezier(.4,0,.2,1);flex-shrink:0;
+  }
+  .toggle-track.on{background:var(--green)}
+  .toggle-track::after{
+    content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
+    background:#fff;border-radius:50%;transition:transform .25s cubic-bezier(.4,0,.2,1);
+    box-shadow:0 1px 3px rgba(0,0,0,.15);
+  }
+  .toggle-track.on::after{transform:translateX(20px)}
+  .connection-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px}
+
+  .empty-state{text-align:center;padding:48px 20px}
+  .empty-state .empty-icon{font-size:36px;margin-bottom:10px;opacity:.6}
+  .empty-state .empty-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-.1px}
+  .empty-state .empty-desc{font-size:13px;color:var(--text2)}
+
+  /* Toast */
+  .toast{
+    position:fixed;bottom:60px;left:50%;transform:translateX(-50%);
+    background:var(--text);color:#fff;padding:10px 22px;border-radius:20px;
+    font-size:13px;font-weight:600;letter-spacing:-.1px;
+    opacity:0;transition:opacity .25s cubic-bezier(.4,0,.2,1);pointer-events:none;z-index:200;
+    box-shadow:var(--shadow-lg);
+  }
+  .toast.show{opacity:1}
+
+  /* Menu popup */
+  .menu-backdrop{position:fixed;inset:0;z-index:99;display:none}
+  .menu-backdrop.show{display:block}
+  .menu-popup{
+    position:fixed;top:70px;right:calc(50% - 480px + 20px);width:280px;
+    background:rgba(255,255,255,.92);backdrop-filter:blur(30px) saturate(180%);
+    -webkit-backdrop-filter:blur(30px) saturate(180%);
+    border-radius:14px;z-index:100;display:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.04),0 16px 48px rgba(0,0,0,.16);
+    overflow:hidden;border:.5px solid rgba(0,0,0,.06);
+  }
+  .menu-popup.show{display:block;animation:menuIn .18s cubic-bezier(.4,0,.2,1)}
+  @keyframes menuIn{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+  .menu-popup .mp-stats{display:flex;gap:0;padding:12px 16px 8px}
+  .menu-popup .mp-stat{flex:1;text-align:center}
+  .menu-popup .mp-stat .mp-v{font-size:22px;font-weight:800;letter-spacing:-.3px}
+  .menu-popup .mp-stat .mp-l{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .menu-popup .mp-sep{height:.5px;background:rgba(0,0,0,.06);margin:4px 12px}
+  .menu-popup .mp-link{
+    display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;font-weight:500;
+    color:var(--text);cursor:pointer;transition:background .1s;letter-spacing:-.1px;
+  }
+  .menu-popup .mp-link:hover{background:rgba(0,0,0,.04)}
+
+  /* Bottom bar */
+  .bottom-bar{display:none}
 </style>
 </head>
 <body>
 
+<div class="bg-pattern"></div>
+
 <div class="app-frame">
   <!-- Titlebar -->
   <div class="titlebar">
-    <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
-    <div class="title">StudioSage — Dashboard</div>
+    <div class="traffic-lights">
+      <div class="dot red"></div><div class="dot yellow"></div>
+      <div class="dot green" id="menuToggle"></div>
+    </div>
+    <div class="title" id="titleText">StudioSage</div>
+    <div class="lang-toggle" id="langSwitch">EN</div>
   </div>
 
-  <!-- Menu Bar Popup (click green dot to toggle) -->
-  <div class="menu-bar-popup" id="menuPopup">
-    <div style="font-weight:600;font-size:14px;margin-bottom:4px">StudioSage</div>
-    <div class="menu-stats">
-      <div class="menu-stat"><div class="val" style="color:#007AFF">3</div><div class="lbl">New</div></div>
-      <div class="menu-stat"><div class="val" style="color:#34C759">8</div><div class="lbl">Auto</div></div>
-      <div class="menu-stat"><div class="val" style="color:#FF3B30">1</div><div class="lbl">Urgent</div></div>
+  <!-- Menu popup -->
+  <div class="menu-backdrop" id="menuBackdrop"></div>
+  <div class="menu-popup" id="menuPopup">
+    <div class="mp-stats">
+      <div class="mp-stat"><div class="mp-v" style="color:var(--blue)" id="mNew">3</div><div class="mp-l" data-i18n="menu.new">新消息</div></div>
+      <div class="mp-stat"><div class="mp-v" style="color:var(--green)" id="mAuto">8</div><div class="mp-l" data-i18n="menu.auto">已回复</div></div>
+      <div class="mp-stat"><div class="mp-v" style="color:var(--red)" id="mUrgent">1</div><div class="mp-l" data-i18n="menu.urgent">紧急</div></div>
     </div>
-    <div class="menu-divider"></div>
-    <div class="menu-link">📊 Open Dashboard</div>
-    <div class="menu-link">⚙️ Settings</div>
-    <div class="menu-divider"></div>
-    <div class="menu-link" style="color:#FF3B30">Quit StudioSage</div>
+    <div class="mp-sep"></div>
+    <div class="mp-link" data-nav="dashboard"><span data-i18n="menu.dashboard">📊 打开面板</span></div>
+    <div class="mp-link" data-nav="settings"><span data-i18n="menu.settings">⚙️ 设置</span></div>
+    <div class="mp-sep"></div>
+    <div class="mp-link" id="quitBtn" style="color:var(--red)"><span data-i18n="menu.quit">退出 StudioSage</span></div>
   </div>
 
   <!-- App Body -->
   <div class="app-body">
     <!-- Sidebar -->
     <div class="sidebar">
-      <div class="section">Main</div>
-      <div class="item active"><span class="icon">📊</span> Dashboard</div>
-      <div class="item"><span class="icon">📥</span> Inbox <span class="badge">3</span></div>
-      <div class="item"><span class="icon">📄</span> Invoices <span class="badge">2</span></div>
-      <div class="section" style="margin-top:20px">Settings</div>
-      <div class="item"><span class="icon">⚙️</span> Settings</div>
-      <div style="margin-top:auto;padding:20px 16px">
-        <div style="font-size:11px;color:#98989D">👤 Emma</div>
-        <div style="font-size:10px;color:#3A3A3C">Pro Plan · Connected</div>
+      <div class="sd-section" data-i18n="sidebar.main">主要</div>
+      <div class="sd-item active" data-nav="dashboard">
+        <span class="sd-icon">◧</span> <span data-i18n="sidebar.dashboard">面板</span>
+      </div>
+      <div class="sd-item" data-nav="inbox">
+        <span class="sd-icon">↓</span> <span data-i18n="sidebar.inbox">收件箱</span>
+        <span class="sd-badge" id="inboxBadge">3</span>
+      </div>
+      <div class="sd-item" data-nav="invoices">
+        <span class="sd-icon">⏐</span> <span data-i18n="sidebar.invoices">发票</span>
+        <span class="sd-badge" id="invoiceBadge">2</span>
+      </div>
+      <div class="sd-spacer"></div>
+      <div class="sd-section" data-i18n="sidebar.settingsGroup">设置</div>
+      <div class="sd-item" data-nav="settings">
+        <span class="sd-icon">⚙</span> <span data-i18n="sidebar.settings">偏好设置</span>
+      </div>
+      <div class="sd-user">
+        <div class="avatar">E</div>
+        <div class="info">
+          <div class="name">Emma Chen</div>
+          <div class="plan"><span data-i18n="sidebar.plan">Pro 版</span> · <span data-i18n="sidebar.connected">已连接</span></div>
+        </div>
       </div>
     </div>
 
-    <!-- Content -->
+    <!-- Content pages -->
     <div class="content">
-      <div class="greeting">👋 Good morning, Emma</div>
-      <div class="subtitle">Today: 3 new messages · 8 auto-replied · 1 needs your attention</div>
 
-      <!-- Stats -->
-      <div class="stats">
-        <div class="stat-card"><div class="value blue">3</div><div class="label">New Messages</div></div>
-        <div class="stat-card"><div class="value green">8</div><div class="label">Auto-Replied</div></div>
-        <div class="stat-card"><div class="value red">1</div><div class="label">Urgent</div></div>
-        <div class="stat-card"><div class="value orange">2</div><div class="label">Draft Invoices</div></div>
-      </div>
+      <!-- == DASHBOARD == -->
+      <div class="page active" id="page-dashboard">
+        <div class="pg-title" data-i18n="dashboard.greeting">早上好，Emma</div>
+        <div class="pg-sub" data-i18n="dashboard.subtitle">今日 3 条新消息，8 条已自动回复，1 条需要你的注意。</div>
 
-      <!-- Urgent Message -->
-      <div class="section-title">🔴 Needs Your Attention</div>
-      <div class="msg-card urgent">
-        <div class="msg-header"><span class="msg-from">Sarah & Mike · Wedding</span><span class="msg-time">2 min ago</span></div>
-        <div class="msg-body">"Hi Emma! We're SO excited! Quick question — can we add 2 more hours on the day? And do you do prints?"</div>
-        <div class="ai-reply">💬 <strong>AI suggests:</strong> "Hi Sarah & Mike! So happy to hear from you! Yes, you can absolutely add 2 hours — it would be $400 extra. And I do offer prints starting at $25 per 8x10. Want me to send you the print catalog?"</div>
-        <div class="actions">
-          <button class="btn btn-primary">📤 Send Reply</button>
-          <button class="btn btn-secondary">✏️ Edit</button>
-          <button class="btn btn-secondary">👤 I'll handle</button>
+        <div class="stats">
+          <div class="stat-card" data-nav="inbox">
+            <div class="val blue">3</div><div class="lbl" data-i18n="dashboard.newMsgs">新消息</div>
+          </div>
+          <div class="stat-card">
+            <div class="val green" id="autoCount">8</div><div class="lbl" data-i18n="dashboard.autoReplied">已回复</div>
+          </div>
+          <div class="stat-card" data-nav="inbox">
+            <div class="val red" id="urgentCount">1</div><div class="lbl" data-i18n="dashboard.urgent">紧急</div>
+          </div>
+          <div class="stat-card" data-nav="invoices">
+            <div class="val orange" id="draftInvoiceCount">2</div><div class="lbl" data-i18n="dashboard.draftInvoices">草稿发票</div>
+          </div>
+        </div>
+
+        <div class="section-label" data-i18n="dashboard.needsAttention">需要你处理</div>
+        <div class="msg-card urgent" id="urgentMsg">
+          <div class="msg-top">
+            <div><span class="msg-from">Sarah &amp; Mike</span><span class="msg-stage">Wedding</span></div>
+            <span class="msg-time">2 分钟前</span>
+          </div>
+          <div class="msg-body">"Emma 你好！我们超级激动！想问一下——婚礼当天可以多加 2 个小时吗？还有你们提供冲印服务吗？"</div>
+          <div class="ai-block" id="urgentReply">
+            <div class="ai-label" data-i18n="dashboard.aiSuggests">AI 建议回复</div>
+            "Sarah &amp; Mike，很高兴收到你们的消息！当然可以多加 2 小时，额外费用是 $400。我们有冲印服务，8×10 每张 $25 起。需要我把冲印目录发给你们吗？"
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" data-action="send" data-msg="urgent" data-i18n="dashboard.sendReply">发送回复</button>
+            <button class="btn btn-ghost" data-action="edit" data-msg="urgent" data-i18n="dashboard.edit">编辑</button>
+            <button class="btn btn-ghost" data-action="manual" data-msg="urgent" data-i18n="dashboard.illHandle">我自己回</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-i18n="dashboard.forReview">待审核</div>
+        <div class="msg-card" id="normalMsg">
+          <div class="msg-top">
+            <div><span class="msg-from">David L.</span><span class="msg-stage">Portrait</span></div>
+            <span class="msg-time">1 小时前</span>
+          </div>
+          <div class="msg-body">"相册还要多久能好？"</div>
+          <div class="ai-block" id="normalReply">
+            <div class="ai-label" data-i18n="dashboard.aiSuggests">AI 建议回复</div>
+            "David 你好，你的相册将在 2–3 周内准备好。要不要先给你发几张抢先看？"
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" data-action="send" data-msg="normal" data-i18n="dashboard.sendReply">发送回复</button>
+            <button class="btn btn-ghost" data-action="edit" data-msg="normal" data-i18n="dashboard.edit">编辑</button>
+          </div>
+        </div>
+
+        <div class="section-label"><span data-i18n="dashboard.autoRepliedToday">今日自动回复</span> · 8</div>
+        <div class="msg-card" style="opacity:.5">
+          <div class="msg-top">
+            <div><span class="msg-from">Jennifer K.</span><span class="msg-stage">Wedding</span></div>
+            <span class="msg-time">3 小时前</span>
+          </div>
+          <div class="msg-body">"照片好了吗？"</div>
+          <div style="font-size:13px;color:var(--green);font-weight:500" data-i18n="dashboard.autoRepliedSample">✓ 已自动回复："您的照片将在 3–5 个工作日内准备好……"</div>
         </div>
       </div>
 
-      <!-- Normal Messages -->
-      <div class="section-title">🟡 For Your Review</div>
-      <div class="msg-card">
-        <div class="msg-header"><span class="msg-from">David L. · Portrait</span><span class="msg-time">1 hr ago</span></div>
-        <div class="msg-body">"How long until the gallery is ready?"</div>
-        <div class="ai-reply">💬 <strong>AI suggests:</strong> "Hi David! Your gallery will be ready within 2-3 weeks. Want a sneak peek in the meantime?"</div>
-        <div class="actions">
-          <button class="btn btn-primary">📤 Send Reply</button>
-          <button class="btn btn-secondary">✏️ Edit</button>
+      <!-- == INBOX == -->
+      <div class="page" id="page-inbox">
+        <div class="pg-title" data-i18n="inbox.title">收件箱</div>
+        <div class="pg-sub" id="inboxSubtitle">3 条未读 · 共 12 个对话</div>
+        <div class="filter-bar">
+          <div class="filter-chip active" data-filter="all" data-i18n="inbox.filterAll">全部</div>
+          <div class="filter-chip" data-filter="urgent" data-i18n="inbox.filterUrgent">紧急</div>
+          <div class="filter-chip" data-filter="unread" data-i18n="inbox.filterUnread">未读</div>
+          <div class="filter-chip" data-filter="replied" data-i18n="inbox.filterReplied">已回复</div>
+        </div>
+        <div id="inboxList"></div>
+        <div class="empty-state" id="inboxEmpty" style="display:none">
+          <div class="empty-icon">✓</div>
+          <div class="empty-title" data-i18n="inbox.emptyTitle">没有消息</div>
+          <div class="empty-desc" data-i18n="inbox.emptyDesc">全部处理完毕</div>
         </div>
       </div>
 
-      <div class="section-title">✅ Auto-Replied Today (8)</div>
-      <div class="msg-card" style="opacity:.6">
-        <div class="msg-header"><span class="msg-from">Jennifer K. · Wedding</span><span class="msg-time">3 hr ago</span></div>
-        <div class="msg-body">"Are the photos ready yet?"</div>
-        <div class="ai-reply" style="color:#34C759">✅ Auto-replied: "Your photos will be ready within 3-5 business days..."</div>
+      <!-- == INVOICES == -->
+      <div class="page" id="page-invoices">
+        <div class="pg-title" data-i18n="invoices.title">发票</div>
+        <div class="pg-sub" data-i18n="invoices.subtitle">2 张草稿 · $0 逾期 · 本月已收 $8,750</div>
+        <div id="invoiceList">
+          <div class="invoice-row">
+            <div class="inv-id">#INV-042</div>
+            <div class="inv-client">Sarah &amp; Mike · 婚礼全包套餐</div>
+            <div class="inv-amount">$4,500</div>
+            <span class="inv-badge draft" data-i18n="invoices.draft">草稿</span>
+          </div>
+          <div class="invoice-row">
+            <div class="inv-id">#INV-041</div>
+            <div class="inv-client">David L. · 肖像摄影</div>
+            <div class="inv-amount">$850</div>
+            <span class="inv-badge draft" data-i18n="invoices.draft">草稿</span>
+          </div>
+          <div class="invoice-row">
+            <div class="inv-id">#INV-040</div>
+            <div class="inv-client">Jennifer K. · 婚礼当日</div>
+            <div class="inv-amount">$3,400</div>
+            <span class="inv-badge paid" data-i18n="invoices.paid">已付</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- == SETTINGS == -->
+      <div class="page" id="page-settings">
+        <div class="pg-title" data-i18n="settings.title">设置</div>
+        <div class="pg-sub" data-i18n="settings.subtitle">配置你的 StudioSage 偏好。</div>
+        <div class="setting-group">
+          <div class="sg-title" data-i18n="settings.aiAutoReply">AI 自动回复</div>
+          <div class="setting-row">
+            <div><div class="sr-label" data-i18n="settings.enableAutoReply">启用自动回复</div><div class="sr-hint" data-i18n="settings.autoReplyDesc">自动回复常见客户咨询</div></div>
+            <div class="toggle-track on" data-toggle="autoReply"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="sr-label" data-i18n="settings.replyDelay">回复延迟</div><div class="sr-hint">30 <span data-i18n="settings.seconds">秒</span></div></div>
+            <button class="btn btn-secondary" style="border-radius:8px;font-size:11px">30s</button>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="sg-title" data-i18n="settings.notifications">通知</div>
+          <div class="setting-row">
+            <div><div class="sr-label" data-i18n="settings.menuBadge">菜单栏角标</div><div class="sr-hint" data-i18n="settings.menuBadgeDesc">在菜单栏显示未读数量</div></div>
+            <div class="toggle-track on" data-toggle="menuBadge"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="sr-label" data-i18n="settings.desktopNotif">桌面通知</div><div class="sr-hint" data-i18n="settings.desktopNotifDesc">紧急消息时推送提醒</div></div>
+            <div class="toggle-track on" data-toggle="desktopNotif"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="sr-label" data-i18n="settings.sound">提示音</div><div class="sr-hint" data-i18n="settings.soundDesc">新消息时播放提示音</div></div>
+            <div class="toggle-track" data-toggle="sound"></div>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="sg-title" data-i18n="settings.serverConnection">服务器连接</div>
+          <div class="setting-row">
+            <div><div class="sr-label" data-i18n="settings.serverUrl">服务器地址</div><div class="sr-hint">api.hzlmagent.com</div></div>
+            <span style="font-size:12px;font-weight:600;color:var(--green);letter-spacing:-.1px"><span class="connection-dot"></span><span data-i18n="settings.connected">已连接</span></span>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-
-  <!-- Bottom Tab Bar (mobile) -->
-  <div class="bottom-bar">
-    <div class="tab active"><span class="tab-icon">📊</span> Dashboard</div>
-    <div class="tab"><span class="tab-icon">📥</span> Inbox</div>
-    <div class="tab"><span class="tab-icon">📄</span> Invoices</div>
-    <div class="tab"><span class="tab-icon">⚙️</span> Settings</div>
   </div>
 </div>
 
-<script>
-  // Toggle menu bar popup on green dot click
-  document.querySelector('.dot.green').addEventListener('click', function(e){
-    e.stopPropagation();
-    var p = document.getElementById('menuPopup');
-    p.style.display = p.style.display === 'block' ? 'none' : 'block';
-  });
-  document.addEventListener('click', function(){
-    document.getElementById('menuPopup').style.display = 'none';
-  });
-</script>
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
+<script>
+// ========== I18N ==========
+const dict = {
+  zh: {
+    'menu.new':'新消息','menu.auto':'已回复','menu.urgent':'紧急',
+    'menu.dashboard':'📊 打开面板','menu.settings':'⚙️ 设置','menu.quit':'退出 StudioSage',
+    'sidebar.main':'主要','sidebar.dashboard':'面板','sidebar.inbox':'收件箱','sidebar.invoices':'发票',
+    'sidebar.settingsGroup':'设置','sidebar.settings':'偏好设置','sidebar.plan':'Pro 版','sidebar.connected':'已连接',
+    'dashboard.greeting':'早上好，Emma',
+    'dashboard.subtitle':'今日 3 条新消息，8 条已自动回复，1 条需要你的注意。',
+    'dashboard.newMsgs':'新消息','dashboard.autoReplied':'已回复','dashboard.urgent':'紧急','dashboard.draftInvoices':'草稿发票',
+    'dashboard.needsAttention':'需要你处理','dashboard.aiSuggests':'AI 建议回复',
+    'dashboard.sendReply':'发送回复','dashboard.edit':'编辑','dashboard.illHandle':'我自己回',
+    'dashboard.forReview':'待审核',
+    'dashboard.autoRepliedToday':'今日自动回复',
+    'dashboard.autoRepliedSample':'✓ 已自动回复："您的照片将在 3–5 个工作日内准备好……"',
+    'inbox.title':'收件箱','inbox.filterAll':'全部','inbox.filterUrgent':'紧急','inbox.filterUnread':'未读','inbox.filterReplied':'已回复',
+    'inbox.emptyTitle':'没有消息','inbox.emptyDesc':'全部处理完毕',
+    'invoices.title':'发票','invoices.subtitle':'2 张草稿 · $0 逾期 · 本月已收 $8,750',
+    'invoices.draft':'草稿','invoices.paid':'已付',
+    'settings.title':'设置','settings.subtitle':'配置你的 StudioSage 偏好。',
+    'settings.aiAutoReply':'AI 自动回复','settings.enableAutoReply':'启用自动回复','settings.autoReplyDesc':'自动回复常见客户咨询',
+    'settings.replyDelay':'回复延迟','settings.seconds':'秒',
+    'settings.notifications':'通知','settings.menuBadge':'菜单栏角标','settings.menuBadgeDesc':'在菜单栏显示未读数量',
+    'settings.desktopNotif':'桌面通知','settings.desktopNotifDesc':'紧急消息时推送提醒',
+    'settings.sound':'提示音','settings.soundDesc':'新消息时播放提示音',
+    'settings.serverConnection':'服务器连接','settings.serverUrl':'服务器地址','settings.connected':'已连接',
+    'toast.sent':'✓ 已发送至','toast.edited':'✏️ 已编辑','toast.manual':'👤 已标记为自己处理',
+    'toast.quit':'StudioSage 将退出（模拟）','toast.invoiceOpen':'📄 正在打开',
+    'toast.autoReplyOn':'自动回复：开','toast.autoReplyOff':'自动回复：关',
+    'toast.menuBadgeOn':'角标：开','toast.menuBadgeOff':'角标：关',
+    'toast.desktopNotifOn':'桌面通知：开','toast.desktopNotifOff':'桌面通知：关',
+    'toast.soundOn':'提示音：开','toast.soundOff':'提示音：关',
+  },
+  en: {
+    'menu.new':'New','menu.auto':'Auto','menu.urgent':'Urgent',
+    'menu.dashboard':'📊 Open Dashboard','menu.settings':'⚙️ Settings','menu.quit':'Quit StudioSage',
+    'sidebar.main':'Main','sidebar.dashboard':'Dashboard','sidebar.inbox':'Inbox','sidebar.invoices':'Invoices',
+    'sidebar.settingsGroup':'Settings','sidebar.settings':'Preferences','sidebar.plan':'Pro Plan','sidebar.connected':'Connected',
+    'dashboard.greeting':'Good morning, Emma',
+    'dashboard.subtitle':'3 new messages today, 8 auto-replied, 1 needs your attention.',
+    'dashboard.newMsgs':'New Messages','dashboard.autoReplied':'Auto-Replied','dashboard.urgent':'Urgent','dashboard.draftInvoices':'Draft Invoices',
+    'dashboard.needsAttention':'Needs Your Attention','dashboard.aiSuggests':'AI Suggests',
+    'dashboard.sendReply':'Send Reply','dashboard.edit':'Edit','dashboard.illHandle':'I\'ll Handle',
+    'dashboard.forReview':'For Your Review',
+    'dashboard.autoRepliedToday':'Auto-Replied Today',
+    'dashboard.autoRepliedSample':'✓ Auto-replied: "Your photos will be ready within 3–5 business days..."',
+    'inbox.title':'Inbox','inbox.filterAll':'All','inbox.filterUrgent':'Urgent','inbox.filterUnread':'Unread','inbox.filterReplied':'Replied',
+    'inbox.emptyTitle':'All Clear','inbox.emptyDesc':'Nothing to review',
+    'invoices.title':'Invoices','invoices.subtitle':'2 drafts · $0 overdue · $8,750 collected this month',
+    'invoices.draft':'Draft','invoices.paid':'Paid',
+    'settings.title':'Settings','settings.subtitle':'Configure your StudioSage preferences.',
+    'settings.aiAutoReply':'AI Auto-Reply','settings.enableAutoReply':'Enable Auto-Reply','settings.autoReplyDesc':'Automatically respond to common inquiries',
+    'settings.replyDelay':'Reply Delay','settings.seconds':'seconds',
+    'settings.notifications':'Notifications','settings.menuBadge':'Menu Bar Badge','settings.menuBadgeDesc':'Show unread count in the menu bar',
+    'settings.desktopNotif':'Desktop Notifications','settings.desktopNotifDesc':'Push alerts for urgent messages',
+    'settings.sound':'Sound','settings.soundDesc':'Play a chime for new messages',
+    'settings.serverConnection':'Server Connection','settings.serverUrl':'Server URL','settings.connected':'Connected',
+    'toast.sent':'✓ Sent to','toast.edited':'✏️ Edited','toast.manual':'👤 Marked as manual',
+    'toast.quit':'StudioSage would quit (simulated)','toast.invoiceOpen':'📄 Opening',
+    'toast.autoReplyOn':'Auto-Reply: On','toast.autoReplyOff':'Auto-Reply: Off',
+    'toast.menuBadgeOn':'Badge: On','toast.menuBadgeOff':'Badge: Off',
+    'toast.desktopNotifOn':'Notifications: On','toast.desktopNotifOff':'Notifications: Off',
+    'toast.soundOn':'Sound: On','toast.soundOff':'Sound: Off',
+  }
+};
+
+// State
+const S = {
+  lang:'zh',page:'dashboard',
+  inboxBadge:3,invoiceBadge:2,urgentCount:1,autoCount:8,draftCount:2,
+  urgentSent:false,urgentHandled:false,
+};
+
+const inboxData = [
+  {id:1,from:'Sarah & Mike',type:'Wedding',typeZh:'婚礼',body:'"Emma 你好！我们超级激动！想问一下——婚礼当天可以多加 2 个小时吗？还有你们提供冲印服务吗？"',bodyEn:'"Hi Emma! We\'re SO excited! Quick question — can we add 2 more hours on the day? And do you do prints?"',time:'2 分钟前',timeEn:'2 min ago',urgent:true,unread:true,replied:false},
+  {id:2,from:'David L.',type:'Portrait',typeZh:'肖像',body:'"相册还要多久能好？"',bodyEn:'"How long until the gallery is ready?"',time:'1 小时前',timeEn:'1 hr ago',urgent:false,unread:true,replied:false},
+  {id:3,from:'Jennifer K.',type:'Wedding',typeZh:'婚礼',body:'"照片好了吗？"',bodyEn:'"Are the photos ready yet?"',time:'3 小时前',timeEn:'3 hr ago',urgent:false,unread:true,replied:true},
+  {id:4,from:'Michael T.',type:'Commercial',typeZh:'商业',body:'"下周四有档期拍产品吗？"',bodyEn:'"Do you have availability for a product shoot next Thursday?"',time:'5 小时前',timeEn:'5 hr ago',urgent:false,unread:false,replied:true},
+  {id:5,from:'Lisa R.',type:'Event',typeZh:'活动',body:'"生日派对的照片收到了！拍得太好了！"',bodyEn:'"Thanks for the birthday party photos! They look amazing!"',time:'6 小时前',timeEn:'6 hr ago',urgent:false,unread:false,replied:true},
+];
+
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+function T(k){return dict[S.lang][k]||k}
+
+function setLang(l){
+  S.lang=l;document.documentElement.lang=l==='zh'?'zh-CN':'en';
+  document.title=l==='zh'?'StudioSage':'StudioSage · Studio Manager';
+  $$('[data-i18n]').forEach(el=>{const k=el.dataset.i18n;if(dict[l][k])el.textContent=dict[l][k]});
+  document.getElementById('langSwitch').textContent=l==='zh'?'EN':'中';
+  updateTitle();updateReplyTexts();updateBadgeTexts();
+  const f=document.querySelector('.filter-chip.active');renderInbox(f?f.dataset.filter:'all');
+}
+
+function updateTitle(){
+  const t=S.lang==='zh'?{dashboard:'面板',inbox:'收件箱',invoices:'发票',settings:'设置'}:{dashboard:'Dashboard',inbox:'Inbox',invoices:'Invoices',settings:'Settings'};
+  document.getElementById('titleText').textContent='StudioSage — '+(t[S.page]||'');
+}
+
+function updateReplyTexts(){
+  const zh=`
+    <div class="ai-label">AI 建议回复</div>
+    "Sarah &amp; Mike，很高兴收到你们的消息！当然可以多加 2 小时，额外费用是 $400。我们有冲印服务，8×10 每张 $25 起。需要我把冲印目录发给你们吗？"
+  `;
+  const en=`
+    <div class="ai-label">AI Suggests</div>
+    "Hi Sarah &amp; Mike! So happy to hear from you! Yes, you can absolutely add 2 hours — it would be $400 extra. And I do offer prints starting at $25 per 8×10. Want me to send you the print catalog?"
+  `;
+  const normalZh=`
+    <div class="ai-label">AI 建议回复</div>
+    "David 你好，你的相册将在 2–3 周内准备好。要不要先给你发几张抢先看？"
+  `;
+  const normalEn=`
+    <div class="ai-label">AI Suggests</div>
+    "Hi David! Your gallery will be ready within 2–3 weeks. Want a sneak peek in the meantime?"
+  `;
+  if(!S.urgentSent&&!S.urgentHandled)document.getElementById('urgentReply').innerHTML=S.lang==='zh'?zh:en;
+  document.getElementById('normalReply').innerHTML=S.lang==='zh'?normalZh:normalEn;
+}
+
+function updateBadgeTexts(){
+  const b=S.inboxBadge;document.getElementById('inboxBadge').textContent=b>0?b:'0';
+  document.getElementById('inboxBadge').style.display=b>0?'':'none';
+  document.getElementById('mNew').textContent=b;document.getElementById('mAuto').textContent=S.autoCount;
+  document.getElementById('mUrgent').textContent=S.urgentCount;
+  document.getElementById('urgentCount').textContent=S.urgentCount;document.getElementById('autoCount').textContent=S.autoCount;
+}
+
+// Nav
+function nav(p){
+  S.page=p;
+  $$('.sd-item').forEach(el=>el.classList.toggle('active',el.dataset.nav===p));
+  $$('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+p));
+  updateTitle();closeMenu();
+}
+$$('.sd-item').forEach(el=>el.addEventListener('click',()=>{if(el.dataset.nav)nav(el.dataset.nav)}));
+$$('.stat-card').forEach(el=>el.addEventListener('click',()=>{if(el.dataset.nav)nav(el.dataset.nav)}));
+
+// Lang switch
+document.getElementById('langSwitch').addEventListener('click',()=>setLang(S.lang==='zh'?'en':'zh'));
+
+// Menu
+function openMenu(){document.getElementById('menuPopup').classList.add('show');document.getElementById('menuBackdrop').classList.add('show')}
+function closeMenu(){document.getElementById('menuPopup').classList.remove('show');document.getElementById('menuBackdrop').classList.remove('show')}
+document.getElementById('menuToggle').addEventListener('click',e=>{e.stopPropagation();document.getElementById('menuPopup').classList.contains('show')?closeMenu():openMenu()});
+document.getElementById('menuBackdrop').addEventListener('click',closeMenu);
+$$('.mp-link').forEach(el=>el.addEventListener('click',()=>{if(el.dataset.nav)nav(el.dataset.nav)}));
+document.getElementById('quitBtn').addEventListener('click',()=>{closeMenu();toast('toast.quit')});
+
+// Toast
+function toast(k,extra){const m=T(k)+(extra?' '+extra:'');const el=document.getElementById('toast');el.textContent=m;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),2000)}
+
+// Message actions
+$$('[data-action="send"]').forEach(btn=>btn.addEventListener('click',function(){
+  const m=this.dataset.msg;
+  if(m==='urgent'){
+    S.urgentSent=S.urgentHandled=true;S.inboxBadge=Math.max(0,S.inboxBadge-1);S.urgentCount=Math.max(0,S.urgentCount-1);S.autoCount++;
+    document.getElementById('urgentMsg').style.opacity='.45';
+    document.getElementById('urgentReply').innerHTML='<div style="font-size:13px;color:var(--green);font-weight:600">✓ '+(S.lang==='zh'?'已发送 · 2 分钟前送达':'Sent · Delivered 2 min ago')+'</div>';
+    document.getElementById('urgentMsg').querySelector('.actions').innerHTML='';
+    document.getElementById('urgentMsg').style.borderLeftColor='var(--green)';
+    updateBadgeTexts();toast('toast.sent','Sarah & Mike');
+  }else if(m==='normal'){
+    S.inboxBadge=Math.max(0,S.inboxBadge-1);
+    document.getElementById('normalMsg').style.opacity='.45';
+    document.getElementById('normalReply').innerHTML='<div style="font-size:13px;color:var(--green);font-weight:600">✓ '+(S.lang==='zh'?'已发送 · 1 小时前送达':'Sent · Delivered 1 hr ago')+'</div>';
+    document.getElementById('normalMsg').querySelector('.actions').innerHTML='';
+    updateBadgeTexts();toast('toast.sent','David L.');
+  }
+}));
+$$('[data-action="edit"]').forEach(btn=>btn.addEventListener('click',function(){
+  const t=prompt(S.lang==='zh'?'编辑回复：':'Edit reply:');
+  if(t&&t.trim())toast('toast.edited');
+}));
+$$('[data-action="manual"]').forEach(btn=>btn.addEventListener('click',function(){
+  S.urgentHandled=true;S.inboxBadge=Math.max(0,S.inboxBadge-1);S.urgentCount=Math.max(0,S.urgentCount-1);
+  document.getElementById('urgentMsg').style.opacity='.55';document.getElementById('urgentMsg').style.borderLeftColor='var(--orange)';
+  document.getElementById('urgentMsg').querySelector('.actions').innerHTML='<span style="font-size:12px;font-weight:600;color:var(--orange)">👤 '+(S.lang==='zh'?'你将自己处理这条消息':'You\'ll handle this one')+'</span>';
+  updateBadgeTexts();toast('toast.manual');
+}));
+
+// Inbox filters
+$$('.filter-chip').forEach(chip=>chip.addEventListener('click',function(){
+  $$('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');
+  renderInbox(this.dataset.filter);
+}));
+
+function renderInbox(filter){
+  const c=document.getElementById('inboxList'),e=document.getElementById('inboxEmpty');
+  let ms=inboxData;
+  if(filter==='urgent')ms=ms.filter(m=>m.urgent);
+  else if(filter==='unread')ms=ms.filter(m=>m.unread);
+  else if(filter==='replied')ms=ms.filter(m=>m.replied);
+  if(!ms.length){c.innerHTML='';e.style.display='block';return}
+  e.style.display='none';
+  const zh=S.lang==='zh';
+  c.innerHTML=ms.map(m=>`
+    <div class="msg-card${m.urgent?' urgent':''}" style="${m.replied?'opacity:.5':''}">
+      <div class="msg-top"><div><span class="msg-from">${m.from}</span><span class="msg-stage">${zh?m.typeZh:m.type}</span></div><span class="msg-time">${zh?m.time:m.timeEn}</span></div>
+      <div class="msg-body">${zh?m.body:m.bodyEn}</div>
+      ${m.replied?'<div style="font-size:13px;color:var(--green);font-weight:500">✓ '+(zh?'已自动回复':'Auto-replied')+'</div>':`
+        <div class="ai-block"><div class="ai-label">${zh?'AI 建议回复':'AI Suggests'}</div>${zh?'草稿已生成，待审核':'Draft ready for review'}</div>
+        <div class="actions">
+          <button class="btn btn-primary send-inline">${zh?'发送回复':'Send'}</button>
+          <button class="btn btn-ghost edit-inline">${zh?'编辑':'Edit'}</button>
+        </div>`}
+    </div>
+  `).join('');
+  c.querySelectorAll('.send-inline').forEach(b=>b.addEventListener('click',function(){
+    const card=this.closest('.msg-card');card.style.opacity='.45';
+    const actions=card.querySelector('.actions');if(actions)actions.innerHTML='<span style="font-size:12px;font-weight:600;color:var(--green)">✓ '+(zh?'已发送':'Sent')+'</span>';
+    S.inboxBadge=Math.max(0,S.inboxBadge-1);S.autoCount++;updateBadgeTexts();toast('toast.sent');
+  }));
+  c.querySelectorAll('.edit-inline').forEach(b=>b.addEventListener('click',()=>{const t=prompt(zh?'编辑回复：':'Edit reply:');if(t&&t.trim())toast('toast.edited')}));
+}
+
+// Settings toggles
+$$('.toggle-track').forEach(t=>t.addEventListener('click',function(){
+  this.classList.toggle('on');const n=this.dataset.toggle;
+  const keys={autoReply:['toast.autoReplyOn','toast.autoReplyOff'],menuBadge:['toast.menuBadgeOn','toast.menuBadgeOff'],desktopNotif:['toast.desktopNotifOn','toast.desktopNotifOff'],sound:['toast.soundOn','toast.soundOff']};
+  if(keys[n])toast(this.classList.contains('on')?keys[n][0]:keys[n][1]);
+}));
+
+// Invoice clicks
+$$('.invoice-row').forEach(r=>r.addEventListener('click',function(){toast('toast.invoiceOpen',this.querySelector('.inv-id').textContent+'...')}));
+
+// Init
+setLang('zh');renderInbox('all');
+</script>
 </body>
 </html>

@@ -1,69 +1,24 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StudioSage — AI Photography Studio Manager</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #FAFAF9; color: #1C1917; line-height: 1.6; }
-.container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
-.hero { text-align: center; padding: 80px 0 60px; }
-.hero h1 { font-size: 2.5rem; font-weight: 700; color: #0F766E; }
-.hero p { font-size: 1.2rem; color: #57534E; margin-top: 12px; max-width: 540px; margin-left: auto; margin-right: auto; }
-.hero .cta { display: inline-block; margin-top: 24px; padding: 14px 32px; background: #0F766E; color: white; border-radius: 9999px; text-decoration: none; font-weight: 600; font-size: 1rem; }
-.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; padding: 40px 0 80px; }
-.feature { background: white; border-radius: 16px; padding: 24px; border: 1px solid #E7E5E4; }
-.feature h3 { font-size: 1rem; color: #0F766E; margin-bottom: 8px; }
-.feature p { font-size: 0.875rem; color: #78716C; }
-.price { text-align: center; padding: 60px 0; background: #F0FDFA; border-radius: 16px; margin: 40px 0; }
-.price h2 { font-size: 1.5rem; color: #0F766E; }
-.price .amount { font-size: 3rem; font-weight: 800; color: #0F766E; margin: 12px 0; }
-.price .amount span { font-size: 1rem; font-weight: 400; color: #57534E; }
-footer { text-align: center; padding: 40px 0; color: #A8A29E; font-size: 0.8rem; }
-</style>
-</head>
-<body>
-<div class="container">
-  <section class="hero">
-    <h1>Your AI Photography Studio Manager</h1>
-    <p>StudioSage sits on top of your existing tools — Pixieset, Google Calendar, Stripe — and handles client messages, invoices, and scheduling while you shoot.</p>
-    <a href="/app" class="cta">Get Early Access — $19/mo</a>
-  </section>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>StudioSage · AI 摄影助理</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",sans-serif;background:#F5F5F7;color:#1D1D1F;-webkit-font-smoothing:antialiased}.nav{max-width:1200px;margin:0 auto;padding:20px 40px;display:flex;justify-content:space-between;align-items:center}.nav .logo{font-size:1.25rem;font-weight:600;color:#1D1D1F}.nav a{color:#007AFF;text-decoration:none;font-size:.9rem;font-weight:500}.hero{text-align:center;padding:100px 40px 80px;max-width:700px;margin:0 auto}.hero h1{font-size:3.2rem;font-weight:700;letter-spacing:-0.02em;line-height:1.1;margin-bottom:16px}.hero h1 span{background:linear-gradient(135deg,#007AFF,#5856D6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.hero p{font-size:1.2rem;color:#86868B;line-height:1.6;margin-bottom:32px}.btn{display:inline-block;padding:14px 32px;border-radius:12px;font-size:1rem;font-weight:600;text-decoration:none;transition:all .2s}.btn-primary{background:#007AFF;color:#fff}.btn-primary:hover{background:#0066D6;transform:translateY(-1px)}.btn-secondary{background:#E8E8ED;color:#1D1D1F;margin-left:12px}.btn-secondary:hover{background:#DCDCE0}.pricing{max-width:1000px;margin:0 auto;padding:80px 40px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}.plan{background:#fff;border-radius:20px;padding:40px 32px;text-align:center;border:1px solid #E5E5EA;transition:all .2s;position:relative}.plan:hover{box-shadow:0 8px 40px rgba(0,0,0,.08);transform:translateY(-2px)}.plan.popular{border:2px solid #007AFF}.plan.popular::before{content:"推荐";position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#007AFF;color:#fff;padding:4px 16px;border-radius:20px;font-size:.75rem;font-weight:600}.plan h3{font-size:1.3rem;margin-bottom:8px}.plan .price{font-size:3rem;font-weight:700;margin:20px 0}.plan .price span{font-size:1rem;font-weight:400;color:#86868B}.plan ul{list-style:none;text-align:left;margin:24px 0}.plan ul li{padding:8px 0;color:#86868B;font-size:.9rem}.plan ul li::before{content:"✓ ";color:#34C759;font-weight:700}.plan .btn{width:100%}.features{max-width:1000px;margin:0 auto;padding:80px 40px;display:grid;grid-template-columns:repeat(3,1fr);gap:40px}.feature{text-align:center}.feature .icon{font-size:2.5rem;margin-bottom:16px}.feature h3{font-size:1.1rem;margin-bottom:8px}.feature p{font-size:.9rem;color:#86868B;line-height:1.6}.footer{text-align:center;padding:40px;color:#86868B;font-size:.8rem;border-top:1px solid #E5E5EA}@media(max-width:768px){.pricing{grid-template-columns:1fr}.hero h1{font-size:2.2rem}}</style></head><body>
+<nav class="nav"><div class="logo">StudioSage</div><a href="/sage/">打开 App</a></nav>
 
-  <section class="features">
-    <div class="feature">
-      <h3>🤖 AI Auto-Reply</h3>
-      <p>Understands 7 photography client stages. Replies with real Pixieset gallery progress, not templates.</p>
-    </div>
-    <div class="feature">
-      <h3>📄 Photography Invoices</h3>
-      <p>Package breakdowns, retainer labels, 3-phase payment schedules. Sales tax handling for prints vs digital.</p>
-    </div>
-    <div class="feature">
-      <h3>🔴 Smart Triage</h3>
-      <p>Not all emails are equal. StudioSage flags the bride 48h before her wedding — before you even open your inbox.</p>
-    </div>
-    <div class="feature">
-      <h3>🔗 No Switching</h3>
-      <p>Works on top of Pixieset, Google Calendar, and Stripe. You don't replace anything — we connect them.</p>
-    </div>
-    <div class="feature">
-      <h3>📱 Mobile First</h3>
-      <p>PWA — add to your home screen. Push notifications for urgent messages while you're on a shoot.</p>
-    </div>
-    <div class="feature">
-      <h3>💰 2 Users = Break Even</h3>
-      <p>$19/mo. Two paying users cover our operating costs. You're not funding VC bloat.</p>
-    </div>
-  </section>
+<section class="hero">
+  <h1>你拍照，<span>杂务交给 AI</span></h1>
+  <p>StudioSage 连接在你的 Pixieset、Google Calendar 和 Stripe 之上。<br>自动回复客户消息、生成摄影专用发票、7×24 后台运行。</p>
+  <a href="/sage/" class="btn btn-primary">免费试用 14 天</a>
+  <a href="#pricing" class="btn btn-secondary">查看定价</a>
+</section>
 
-  <section class="price">
-    <h2>Simple Pricing</h2>
-    <div class="amount">$19<span>/month</span></div>
-    <p style="color:#57534E;font-size:0.9rem;">Free 14-day trial. Cancel anytime.<br>Connect up to 3 tools. Unlimited AI replies.</p>
-  </section>
-</div>
-<footer>StudioSage — Built for photographers, not for VCs.</footer>
-</body>
-</html>
+<section class="features">
+  <div class="feature"><div class="icon">🤖</div><h3>AI 自动回复</h3><p>理解 7 个客户阶段的语境。客户问"照片好了吗"，AI 查 Pixieset 画廊状态后回复真实进度。</p></div>
+  <div class="feature"><div class="icon">📄</div><h3>摄影专用发票</h3><p>retainer/deposit 区分、三期付款、套餐拆分明细、实物 vs 数码税率——不是通用发票工具。</p></div>
+  <div class="feature"><div class="icon">🔴</div><h3>智能消息分类</h3><p>新娘 48 小时后婚礼的紧急询问不会和"谢谢"混在一起。按阶段×内容×业务影响排序。</p></div>
+</section>
+
+<section id="pricing" class="pricing">
+  <div class="plan"><h3>免费试用</h3><div class="price">$0<span>/14天</span></div><ul><li>50 条消息处理</li><li>10 张发票</li><li>基础消息分类</li><li>1 个工具连接</li></ul><a href="/sage/" class="btn btn-secondary">开始试用</a></div>
+  <div class="plan popular"><h3>Pro</h3><div class="price">$19<span>/月</span></div><ul><li>无限消息处理</li><li>无限发票生成</li><li>AI 智能回复</li><li>3 个工具连接</li><li>邮件支持</li></ul><a href="/sage/" class="btn btn-primary">开始试用</a></div>
+  <div class="plan"><h3>Studio</h3><div class="price">$39<span>/月</span></div><ul><li>Pro 全部功能</li><li>无限工具连接</li><li>多品牌支持</li><li>优先客服</li><li>API 访问</li></ul><a href="/sage/" class="btn btn-secondary">开始试用</a></div>
+</section>
+
+<footer class="footer">StudioSage · Built for photographers, not for VCs.</footer>
+</body></html>
