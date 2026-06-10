@@ -10,7 +10,7 @@ export default defineConfig({
       manifest: {
         name: 'StudioSage',
         short_name: 'StudioSage',
-        description: 'AI photography studio manager',
+        description: 'AI 摄影助手 — 帮你打理客户消息、发票和杂务 / Your photography studio assistant',
         theme_color: '#0F766E',
         background_color: '#FAFAF9',
         display: 'standalone',
