@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudioSage · macOS App Preview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Inter",sans-serif;
+    background:#1E1E2E;color:#CDD6F4;display:flex;justify-content:center;align-items:center;
+    min-height:100vh;padding:40px;-webkit-font-smoothing:antialiased;
+  }
+  .app-frame{
+    background:#1C1C1E;border-radius:16px;overflow:hidden;width:840px;
+    box-shadow:0 25px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.05);
+  }
+  .titlebar{
+    height:38px;background:#2C2C2E;display:flex;align-items:center;padding:0 16px;gap:8px;
+  }
+  .dot{width:12px;height:12px;border-radius:50%}
+  .dot.red{background:#FF5F57}.dot.yellow{background:#FEBc2E}.dot.green{background:#28C840}
+  .titlebar .title{flex:1;text-align:center;font-size:13px;font-weight:500;color:#98989D}
+
+  .app-body{display:flex;min-height:500px}
+  .sidebar{width:220px;background:#1C1C1E;border-right:1px solid #2C2C2E;padding:20px 0}
+  .sidebar .section{padding:8px 16px;font-size:11px;font-weight:600;color:#98989D;text-transform:uppercase;letter-spacing:.5px}
+  .sidebar .item{display:flex;align-items:center;gap:10px;padding:6px 16px;font-size:13px;color:#CDD6F4;border-radius:0;margin:1px 8px}
+  .sidebar .item:hover{background:#2C2C2E}
+  .sidebar .item.active{background:#007AFF;color:#fff}
+  .sidebar .item .icon{font-size:15px;width:20px;text-align:center}
+  .sidebar .badge{background:#FF3B30;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:auto}
+
+  .content{flex:1;padding:24px;overflow-y:auto}
+  .greeting{font-size:22px;font-weight:700;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#98989D;margin-bottom:24px}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+  .stat-card{background:#2C2C2E;border-radius:12px;padding:16px;text-align:center}
+  .stat-card .value{font-size:28px;font-weight:700}
+  .stat-card .label{font-size:11px;color:#98989D;margin-top:4px}
+  .stat-card .value.blue{color:#007AFF}
+  .stat-card .value.green{color:#34C759}
+  .stat-card .value.red{color:#FF3B30}
+  .stat-card .value.orange{color:#FF9500}
+
+  .msg-card{background:#2C2C2E;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid transparent}
+  .msg-card.urgent{border-color:#FF3B30;background:rgba(255,59,48,.05)}
+  .msg-card .msg-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .msg-card .msg-from{font-weight:600;font-size:14px}
+  .msg-card .msg-time{font-size:11px;color:#98989D}
+  .msg-card .msg-body{font-size:13px;color:#98989D;margin-bottom:10px}
+  .msg-card .ai-reply{background:rgba(0,122,255,.08);border-radius:8px;padding:10px 12px;font-size:13px;color:#7AAEFF;margin-bottom:10px}
+  .msg-card .actions{display:flex;gap:8px}
+  .btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none}
+  .btn-primary{background:#007AFF;color:#fff}
+  .btn-secondary{background:#3A3A3C;color:#CDD6F4}
+  .btn-primary:hover{background:#0066D6}
+
+  .section-title{font-size:13px;font-weight:600;color:#98989D;margin:20px 0 10px}
+
+  .bottom-bar{display:flex;justify-content:space-around;padding:12px;border-top:1px solid #2C2C2E}
+  .bottom-bar .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:#98989D;cursor:pointer}
+  .bottom-bar .tab.active{color:#007AFF}
+  .bottom-bar .tab .tab-icon{font-size:18px}
+
+  .menu-bar-popup{position:fixed;top:0;right:20px;width:300px;background:#2C2C2E;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:16px;z-index:100;display:none}
+  .menu-bar-popup .menu-stats{display:flex;gap:12px;margin-bottom:12px}
+  .menu-bar-popup .menu-stat{text-align:center}
+  .menu-bar-popup .menu-stat .val{font-size:20px;font-weight:700}
+  .menu-bar-popup .menu-stat .lbl{font-size:10px;color:#98989D}
+  .menu-bar-popup .menu-divider{border-top:1px solid #3A3A3C;margin:12px 0}
+  .menu-bar-popup .menu-link{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;color:#CDD6F4;cursor:pointer}
+  .menu-bar-popup .menu-link:hover{background:#3A3A3C}
+</style>
+</head>
+<body>
+
+<div class="app-frame">
+  <!-- Titlebar -->
+  <div class="titlebar">
+    <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+    <div class="title">StudioSage — Dashboard</div>
+  </div>
+
+  <!-- Menu Bar Popup (click green dot to toggle) -->
+  <div class="menu-bar-popup" id="menuPopup">
+    <div style="font-weight:600;font-size:14px;margin-bottom:4px">StudioSage</div>
+    <div class="menu-stats">
+      <div class="menu-stat"><div class="val" style="color:#007AFF">3</div><div class="lbl">New</div></div>
+      <div class="menu-stat"><div class="val" style="color:#34C759">8</div><div class="lbl">Auto</div></div>
+      <div class="menu-stat"><div class="val" style="color:#FF3B30">1</div><div class="lbl">Urgent</div></div>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-link">📊 Open Dashboard</div>
+    <div class="menu-link">⚙️ Settings</div>
+    <div class="menu-divider"></div>
+    <div class="menu-link" style="color:#FF3B30">Quit StudioSage</div>
+  </div>
+
+  <!-- App Body -->
+  <div class="app-body">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="section">Main</div>
+      <div class="item active"><span class="icon">📊</span> Dashboard</div>
+      <div class="item"><span class="icon">📥</span> Inbox <span class="badge">3</span></div>
+      <div class="item"><span class="icon">📄</span> Invoices <span class="badge">2</span></div>
+      <div class="section" style="margin-top:20px">Settings</div>
+      <div class="item"><span class="icon">⚙️</span> Settings</div>
+      <div style="margin-top:auto;padding:20px 16px">
+        <div style="font-size:11px;color:#98989D">👤 Emma</div>
+        <div style="font-size:10px;color:#3A3A3C">Pro Plan · Connected</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <div class="greeting">👋 Good morning, Emma</div>
+      <div class="subtitle">Today: 3 new messages · 8 auto-replied · 1 needs your attention</div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat-card"><div class="value blue">3</div><div class="label">New Messages</div></div>
+        <div class="stat-card"><div class="value green">8</div><div class="label">Auto-Replied</div></div>
+        <div class="stat-card"><div class="value red">1</div><div class="label">Urgent</div></div>
+        <div class="stat-card"><div class="value orange">2</div><div class="label">Draft Invoices</div></div>
+      </div>
+
+      <!-- Urgent Message -->
+      <div class="section-title">🔴 Needs Your Attention</div>
+      <div class="msg-card urgent">
+        <div class="msg-header"><span class="msg-from">Sarah & Mike · Wedding</span><span class="msg-time">2 min ago</span></div>
+        <div class="msg-body">"Hi Emma! We're SO excited! Quick question — can we add 2 more hours on the day? And do you do prints?"</div>
+        <div class="ai-reply">💬 <strong>AI suggests:</strong> "Hi Sarah & Mike! So happy to hear from you! Yes, you can absolutely add 2 hours — it would be $400 extra. And I do offer prints starting at $25 per 8x10. Want me to send you the print catalog?"</div>
+        <div class="actions">
+          <button class="btn btn-primary">📤 Send Reply</button>
+          <button class="btn btn-secondary">✏️ Edit</button>
+          <button class="btn btn-secondary">👤 I'll handle</button>
+        </div>
+      </div>
+
+      <!-- Normal Messages -->
+      <div class="section-title">🟡 For Your Review</div>
+      <div class="msg-card">
+        <div class="msg-header"><span class="msg-from">David L. · Portrait</span><span class="msg-time">1 hr ago</span></div>
+        <div class="msg-body">"How long until the gallery is ready?"</div>
+        <div class="ai-reply">💬 <strong>AI suggests:</strong> "Hi David! Your gallery will be ready within 2-3 weeks. Want a sneak peek in the meantime?"</div>
+        <div class="actions">
+          <button class="btn btn-primary">📤 Send Reply</button>
+          <button class="btn btn-secondary">✏️ Edit</button>
+        </div>
+      </div>
+
+      <div class="section-title">✅ Auto-Replied Today (8)</div>
+      <div class="msg-card" style="opacity:.6">
+        <div class="msg-header"><span class="msg-from">Jennifer K. · Wedding</span><span class="msg-time">3 hr ago</span></div>
+        <div class="msg-body">"Are the photos ready yet?"</div>
+        <div class="ai-reply" style="color:#34C759">✅ Auto-replied: "Your photos will be ready within 3-5 business days..."</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Tab Bar (mobile) -->
+  <div class="bottom-bar">
+    <div class="tab active"><span class="tab-icon">📊</span> Dashboard</div>
+    <div class="tab"><span class="tab-icon">📥</span> Inbox</div>
+    <div class="tab"><span class="tab-icon">📄</span> Invoices</div>
+    <div class="tab"><span class="tab-icon">⚙️</span> Settings</div>
+  </div>
+</div>
+
+<script>
+  // Toggle menu bar popup on green dot click
+  document.querySelector('.dot.green').addEventListener('click', function(e){
+    e.stopPropagation();
+    var p = document.getElementById('menuPopup');
+    p.style.display = p.style.display === 'block' ? 'none' : 'block';
+  });
+  document.addEventListener('click', function(){
+    document.getElementById('menuPopup').style.display = 'none';
+  });
+</script>
+
+</body>
+</html>

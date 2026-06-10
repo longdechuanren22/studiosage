@@ -12,29 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Swift App
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        working-directory: macos
+        run: xcodegen generate
+
+      - name: Build App
         working-directory: macos
         run: |
-          swiftc -target arm64-apple-macos14.0 \
-            -o StudioSage \
-            StudioSage/Models/Message.swift \
-            StudioSage/Services/APIClient.swift \
-            StudioSage/Services/NotificationService.swift \
-            StudioSage/AppState.swift \
-            StudioSage/Views/MenuBarView.swift \
-            StudioSage/Views/DashboardView.swift \
-            StudioSage/Views/InboxView.swift \
-            StudioSage/Views/MessageRow.swift \
-            StudioSage/Views/InvoiceListView.swift \
-            StudioSage/Views/SettingsView.swift \
-            StudioSage/StudioSageApp.swift \
-            -framework SwiftUI -framework AppKit -framework UserNotifications
+          xcodebuild -project StudioSage.xcodeproj \
+            -scheme StudioSage \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            SWIFT_VERSION=5.0 \
+            clean build
 
-      - name: Verify
-        run: ls -la macos/StudioSage && echo "BUILD SUCCESS"
-
-      - name: Upload Binary
+      - name: Upload App
         uses: actions/upload-artifact@v4
         with:
           name: StudioSage-macOS
-          path: macos/StudioSage
+          path: macos/DerivedData/Build/Products/Release/StudioSage.app
