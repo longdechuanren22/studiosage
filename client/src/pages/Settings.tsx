@@ -35,6 +35,32 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Plan */}
+      <div style={{ background:'linear-gradient(135deg, rgba(0,122,255,.04), rgba(88,86,214,.04))', borderRadius:16, padding:16, boxShadow:'0 1px 3px rgba(0,0,0,.04)', border:'.5px solid rgba(0,122,255,.1)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700, letterSpacing:'-.1px' }}>Pro 助手</div>
+            <div style={{ fontSize:12, color:'#86868B' }}>14 天免费试用 · 无需信用卡</div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontSize:22, fontWeight:800, color:'#007AFF', letterSpacing:'-.5px' }}>$10<span style={{fontSize:13,fontWeight:500,color:'#86868B'}}>/月</span></div>
+            <div style={{ fontSize:10, color:'#86868B' }}>年付 $96 · $8/月</div>
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', fontSize:11, color:'#86868B' }}>
+          <span>✓ AI 自动分类+回复</span>
+          <span>✓ 摄影专用发票</span>
+          <span>✓ 客户管线</span>
+          <span>✓ 无限消息</span>
+        </div>
+        <button style={{
+          width:'100%', marginTop:10, padding:'10px', borderRadius:14, fontSize:13, fontWeight:700,
+          background:'#007AFF', color:'#fff', border:'none', cursor:'pointer', letterSpacing:'-.1px',
+        }} onClick={()=>alert('试用模式已激活。连接 Stripe 后升级正式版。')}>
+          开始 14 天免费试用
+        </button>
+      </div>
+
       {/* AI Auto-Reply */}
       <div style={{ background:'#fff', borderRadius:16, padding:'4px 0', boxShadow:'0 1px 3px rgba(0,0,0,.04)' }}>
         <div style={{ padding:'8px 14px' }}>
