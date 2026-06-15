@@ -172,23 +172,6 @@ function detectCategory(body: string, subject: string): 'urgent' | 'normal' | 's
   return 'normal';
 }
 
-const REPLY_TEMPLATES: Record<string, Record<string, string>> = {
-  inquiry: {
-    wedding: "Hi! Thanks so much for reaching out! I'd love to chat about your wedding. My packages start at $3,500 and include 8 hours of coverage + 600+ edited images. What date are you looking at? I'll check availability right away!",
-    portrait: "Hi! Thanks for your interest! My portrait sessions start at $450 and include 1 hour of shooting + 50+ edited images. What type of portraits are you looking for? Happy to share more details!",
-    default: "Hi! Thanks for reaching out! I'd love to hear more about what you're looking for. What type of photography are you interested in, and what dates work for you?",
-  },
-  post_production: {
-    default: "Hi! I'm currently working on your photos and they're turning out beautifully! The usual turnaround is 2-3 weeks from the shoot date. I'll send you a sneak peek in the next few days. Thanks for your patience!",
-  },
-  delivery: {
-    default: "Hi! Here's the link to your gallery. The password is the same as before. Let me know if you have any trouble accessing it! If you'd like to order prints or create an album, you can do so directly from the gallery.",
-  },
-  post_delivery: {
-    default: "Thank you so much! I'm thrilled you love them. It was such a pleasure working with you. If you ever need more photos in the future, I'd love to work together again!",
-  },
-};
-
 export interface ClassifyResult {
   category: 'urgent' | 'normal' | 'spam';
   summary: string;
@@ -234,9 +217,7 @@ const PACKAGE_DEFAULTS: Record<string, InvoiceItem[]> = {
 export function classifyOffline(body: string, subject: string, clientContext?: { name?: string; stage?: string; packageType?: string }): ClassifyResult {
   const stage = clientContext?.stage || detectStage(body, subject);
   const category = detectCategory(body, subject);
-  const pkg = clientContext?.packageType || 'default';
-  const templates = REPLY_TEMPLATES[stage] || REPLY_TEMPLATES.inquiry;
-  const reply = (templates as any)[pkg] || templates.default || REPLY_TEMPLATES.inquiry.default;
+  const reply = generateSmartReply(body, subject, stage, clientContext);
 
   return {
     category,
@@ -245,6 +226,127 @@ export function classifyOffline(body: string, subject: string, clientContext?: {
     confidence: 0.75,
     stage,
   };
+}
+
+// Generate a context-aware reply based on what the client actually said
+function generateSmartReply(body: string, subject: string, stage: string, ctx?: { name?: string; stage?: string; packageType?: string }): string {
+  const text = (subject + ' ' + body).toLowerCase();
+  const isReply = /^re:/i.test(subject);
+  const clientName = ctx?.name || '';
+
+  // ── Detect what the client is asking about ──
+  const shootType = detectShootType(text);
+  const hasDate = /\b(january|february|march|april|may|june|july|august|september|october|november|december| next |this |week|month|202[0-9])\b/i.test(text)
+    || /[0-9]+月|[0-9]+日|明年|今年|下[个周月]|这[个周月]/.test(text);
+  const hasBudget = /(budget|price|cost|rate|charge|fee|how much|多少钱|价格|费用|收费|报价)/i.test(text);
+  const hasLocation = /(location|venue|where|place|地点|位置|哪里|地址)/i.test(text);
+  const hasQuestion = /\?/.test(text);
+
+  // ── Build reply based on stage and context ──
+  const greeting = clientName ? `Hi ${clientName}!` : 'Hi!';
+
+  if (stage === 'inquiry' || stage === 'engaged') {
+    let reply = greeting + ' ';
+
+    // Acknowledge what they asked about
+    if (shootType) {
+      const typeLabel: Record<string, string> = {
+        wedding: 'wedding', portrait: 'portrait session', child: 'child/family photoshoot',
+        event: 'event', commercial: 'commercial shoot', newborn: 'newborn session',
+        birthday: 'birthday celebration', maternity: 'maternity session',
+      };
+      const label = typeLabel[shootType] || shootType + ' photography';
+      reply += `Thanks for reaching out about the ${label}! `;
+
+      if (shootType === 'child' || shootType === 'birthday' || shootType === 'newborn') {
+        reply += `I'd love to capture these special moments for your little one. `;
+      } else if (shootType === 'wedding') {
+        reply += `Congratulations on your engagement! I'd love to hear more about your wedding plans. `;
+      } else if (shootType === 'portrait' || shootType === 'maternity') {
+        reply += `I'd love to create beautiful portraits for you. `;
+      }
+    } else {
+      reply += `Thanks for reaching out! `;
+    }
+
+    // Respond to specific questions
+    if (hasBudget && shootType) {
+      const prices: Record<string, string> = {
+        wedding: 'Wedding packages start at $3,500 for 8 hours of coverage.',
+        portrait: 'Portrait sessions start at $450 for 1 hour.',
+        child: 'Family/child sessions start at $450 for 1 hour.',
+        event: 'Event coverage starts at $1,200 for 4 hours.',
+        newborn: 'Newborn sessions start at $500.',
+        birthday: 'Birthday party coverage starts at $600.',
+      };
+      reply += prices[shootType] || 'I\'d be happy to share my pricing with you. ';
+    }
+
+    if (hasDate) {
+      reply += `I'll check my availability — could you share the specific date you have in mind? `;
+    } else {
+      reply += `What date are you looking at? I'll check availability right away! `;
+    }
+
+    if (hasLocation) {
+      reply += `I'm happy to travel to your location. Let me know where it'll be and I can confirm. `;
+    }
+
+    if (!hasQuestion) {
+      reply += `Feel free to share more details — I'm happy to customize a package for you.`;
+    }
+
+    return reply;
+  }
+
+  // Follow-up / ongoing conversation
+  if (isReply) {
+    return `${greeting} Got it, thanks for the follow-up! I've noted the details. Let me know if anything else comes up, and we'll get everything sorted.`;
+  }
+
+  if (stage === 'booking') {
+    return `${greeting} Great! I've attached the contract and invoice for your review. Once the retainer is received, the date is confirmed. Let me know if you have any questions!`;
+  }
+
+  if (stage === 'post_production') {
+    return `${greeting} I'm working on your photos — they're looking beautiful! The usual turnaround is 2-3 weeks. I'll send a sneak peek in the next few days. Thanks for your patience!`;
+  }
+
+  if (stage === 'delivery') {
+    return `${greeting} Here's the link to your gallery! The password is the same as before. You can order prints and albums directly from the gallery. Let me know if you have any trouble accessing it!`;
+  }
+
+  // Default fallback
+  return `${greeting} Thanks for your message! I'll get back to you shortly with more details.`;
+}
+
+// Detect the type of photography shoot from email content
+function detectShootType(text: string): string | null {
+  // Chinese patterns first (for QQ/163 mailboxes)
+  if (/周岁|百天|满月|宝宝|婴儿|孩子|儿童|亲子|小孩|宝贝|萌宝/i.test(text)) return 'child';
+  if (/生日.*(拍|照|摄影|写真|聚会|派对|庆祝)/i.test(text) || /(拍|照|摄影).*生日/i.test(text)) return 'birthday';
+  if (/孕妇|孕照|孕期|大肚子|怀孕/i.test(text)) return 'maternity';
+  if (/婚礼|婚庆|结婚|新娘|新郎|订婚|婚纱/i.test(text)) return 'wedding';
+  if (/写真|个人|形象|肖像/i.test(text)) return 'portrait';
+  if (/活动|年会|开业|庆典|会议|发布会/i.test(text)) return 'event';
+  if (/产品|商品|电商|淘宝|服装|美食/i.test(text)) return 'commercial';
+  if (/新生儿|刚出生/i.test(text)) return 'newborn';
+
+  // English patterns
+  if (/wedding|bride|groom|bridal|marriage|ceremony|reception/i.test(text)) return 'wedding';
+  if (/portrait|headshot|maternity|pregnant|pregnancy|baby bump/i.test(text)) return 'portrait';
+  if (/newborn|just born|baby.*(photo|shoot|session|picture)/i.test(text)) return 'newborn';
+  if (/(child|kid|family|toddler|baby|infant).*(photo|shoot|session|picture|portrait)/i.test(text)
+    || /(photo|shoot|session).*(child|kid|family|toddler|baby|infant)/i.test(text)) return 'child';
+  if (/birthday.*(party|celebration|photo|shoot|session)/i.test(text)
+    || /(photo|shoot).*birthday/i.test(text)) return 'birthday';
+  if (/event|party|corporate|gala|conference|celebration/i.test(text)) return 'event';
+  if (/commercial|product|real.estate|food|fashion|catalog/i.test(text)) return 'commercial';
+
+  // Generic photography interest
+  if (/photograph|photo|shoot|session|picture|portrait/i.test(text)) return 'portrait';
+
+  return null;
 }
 
 export function generateInvoiceOffline(params: GenerateInvoiceParams) {
