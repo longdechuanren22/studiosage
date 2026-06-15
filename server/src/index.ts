@@ -35,9 +35,28 @@ const PORT = process.env.PORT || 3001;
 
 initDb().catch(err => { logger.error('DB init failed:', err); process.exit(1); });
 
-// Auto-start email watcher if config exists in DB — disabled for now
-// async function tryStartEmailWatcher() { ... }
-// tryStartEmailWatcher();
+// Auto-start email watcher if config exists in DB
+async function tryStartEmailWatcher() {
+  try {
+    const { initDb } = await import('./db/schema.js');
+    const { queryAll } = await import('./db/query.js');
+    await initDb();
+    const connections = queryAll("SELECT * FROM tool_connections WHERE tool_id = 'email_imap' AND status = 'active'") as any[];
+    for (const conn of connections) {
+      const cfg = JSON.parse(conn.access_token_encrypted || '{}');
+      const { decrypt } = await import('./utils/crypto.js');
+      const password = conn.refresh_token_encrypted ? decrypt(conn.refresh_token_encrypted) : '';
+      if (cfg.email) {
+        const { startEmailWatcher } = await import('./workers/email-watcher.js');
+        startEmailWatcher({ ...cfg, password }, 15000, conn.user_id);
+        logger.info(`Auto-started email watcher for ${cfg.email}`);
+      }
+    }
+  } catch (err) {
+    logger.warn('Could not auto-start email watcher:', (err as Error).message);
+  }
+}
+setTimeout(tryStartEmailWatcher, 2000);
 
 app.use(securityHeaders as any);
 app.use(apiLimiter);
