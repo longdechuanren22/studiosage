@@ -1,40 +1,63 @@
 import { Router, type Router as RouterType } from 'express';
-import { initDb, saveDb } from '../db/schema.js';
+import { initDb } from '../db/schema.js';
 import { run } from '../db/query.js';
 
 const router: RouterType = Router();
 
-// Stripe webhook — payment status updates
-router.post('/stripe', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  if (!sig) return res.status(400).json({ error: 'Missing signature' });
+function getRawBody(req: any): string {
+  if (typeof req.body === 'string') return req.body;
+  if (Buffer.isBuffer(req.body)) return req.body.toString('utf-8');
+  return JSON.stringify(req.body);
+}
 
-  try {
-    const event = req.body;
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-      case 'checkout.session.completed':
-        const invoiceId = event.data.object.metadata?.invoice_id;
-        if (invoiceId) {
-          await initDb();
-          run('UPDATE invoices SET status = ? WHERE id = ?', ['paid', invoiceId]);
-          saveDb();
-        }
-        break;
-      case 'payment_intent.payment_failed':
-        const failId = event.data.object.metadata?.invoice_id;
-        if (failId) {
-          await initDb();
-          run('UPDATE invoices SET status = ? WHERE id = ?', ['overdue', failId]);
-          saveDb();
-        }
-        break;
+// Stripe webhook — payment status updates (with signature verification)
+router.post('/stripe', async (req, res) => {
+  const sig = req.headers['stripe-signature'] as string;
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  // Require webhook secret in production, skip verification in dev
+  if (secret) {
+    try {
+      // Dynamic import to avoid top-level Stripe init
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+      const rawBody = getRawBody(req);
+      const event = stripe.webhooks.constructEvent(rawBody, sig, secret);
+      await handleEvent(event);
+    } catch (err: any) {
+      console.error('[Stripe Webhook] Signature verification failed:', err.message);
+      return res.status(400).json({ error: 'Invalid signature' });
     }
-    res.json({ received: true });
-  } catch (err) {
-    res.status(400).json({ error: 'Webhook error' });
+  } else {
+    // Dev mode: no webhook secret configured, trust req.body directly
+    console.warn('[Stripe Webhook] No STRIPE_WEBHOOK_SECRET — trusting raw body (dev only)');
+    await handleEvent(req.body);
   }
+
+  res.json({ received: true });
 });
+
+async function handleEvent(event: any) {
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+    case 'checkout.session.completed': {
+      const invoiceId = event.data.object.metadata?.invoice_id;
+      if (invoiceId) {
+        await initDb();
+        run('UPDATE invoices SET status = ? WHERE id = ?', ['paid', invoiceId]);
+      }
+      break;
+    }
+    case 'payment_intent.payment_failed': {
+      const failId = event.data.object.metadata?.invoice_id;
+      if (failId) {
+        await initDb();
+        run('UPDATE invoices SET status = ? WHERE id = ?', ['overdue', failId]);
+      }
+      break;
+    }
+  }
+}
 
 // Pixieset webhook — gallery status updates
 router.post('/pixieset', async (req, res) => {
@@ -43,7 +66,6 @@ router.post('/pixieset', async (req, res) => {
     await initDb();
     run('UPDATE clients SET metadata = ? WHERE pixieset_gallery_id = ?',
       [JSON.stringify({ galleryPublished: new Date().toISOString() }), gallery.id]);
-    saveDb();
   }
   res.json({ received: true });
 });

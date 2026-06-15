@@ -1,58 +1,101 @@
 import { Router, type Router as RouterType } from 'express';
 import { v4 as uuid } from 'uuid';
-import crypto from 'node:crypto';
-import { initDb, saveDb } from '../db/schema.js';
+import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
 import { classifyMessage } from '../ai/engine.js';
+import { sendReply } from '../adapters/email.js';
+import { decrypt } from '../utils/crypto.js';
 
 const router: RouterType = Router();
 const uuidv4 = () => uuid();
 
-router.get('/inbox', async (_req, res) => {
+// Get inbox messages from DB (populated by email-watcher)
+router.get('/inbox', async (req, res) => {
   await initDb();
+  const userId = req.userId!;
   const messages = queryAll(`
     SELECT m.*, c.name as client_name, c.stage as client_stage
     FROM messages m LEFT JOIN clients c ON m.client_id = c.id
+    WHERE m.user_id = ? AND m.status != 'archived'
     ORDER BY CASE m.category WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
     m.created_at DESC LIMIT 50
-  `);
+  `, [userId]);
   res.json(messages);
 });
 
+// Get dashboard stats
+router.get('/stats', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const newCount = (queryOne('SELECT COUNT(*) as c FROM messages WHERE user_id = ? AND status = ?', [userId, 'pending']) as any)?.c || 0;
+  const repliedCount = (queryOne('SELECT COUNT(*) as c FROM messages WHERE user_id = ? AND status = ?', [userId, 'replied']) as any)?.c || 0;
+  const urgentCount = (queryOne('SELECT COUNT(*) as c FROM messages WHERE user_id = ? AND category = ? AND status = ?', [userId, 'urgent', 'pending']) as any)?.c || 0;
+  const totalCount = (queryOne('SELECT COUNT(*) as c FROM messages WHERE user_id = ?', [userId]) as any)?.c || 0;
+  res.json({ newMessages: newCount, repliedCount, urgentCount, totalCount });
+});
+
+// Incoming message from email watcher
 router.post('/incoming', async (req, res) => {
   await initDb();
+  const userId = req.userId!;
   const { from, subject, body, clientId } = req.body;
   const id = uuidv4();
 
-  let clientContext;
+  let clientContext: any;
   if (clientId) {
-    clientContext = queryOne('SELECT * FROM clients WHERE id = ?', [clientId]);
+    clientContext = queryOne('SELECT * FROM clients WHERE id = ? AND user_id = ?', [clientId, userId]);
   }
 
-  const classification = await classifyMessage(body, subject || '', clientContext as any);
+  const classification = await classifyMessage(body, subject || '', clientContext);
 
-  run(`INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, stage_at_time)
+  run(`INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, 'default', clientId || null, from || '', subject || '', body || '',
-     classification.category, 'pending', classification.suggestedReply, classification.stage || null]);
-  saveDb();
+    [id, userId, clientId || null, from || '', subject || '', body || '',
+     classification.category, 'pending', classification.suggestedReply, new Date().toISOString()]);
 
   res.json({ id, ...classification });
 });
 
-router.post('/:id/reply', async (req, res) => {
+// Update AI reply (user edits the draft)
+router.patch('/:id/reply', async (req, res) => {
   await initDb();
+  const userId = req.userId!;
+  const { id } = req.params;
+  const { ai_reply } = req.body;
+  run('UPDATE messages SET ai_reply = ? WHERE id = ? AND user_id = ?', [ai_reply || '', id, userId]);
+  res.json({ ok: true });
+});
+
+// Send reply via real SMTP
+router.post('/:id/send', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
   const { id } = req.params;
   const { customText } = req.body;
 
-  if (customText) {
-    run('UPDATE messages SET status = ?, ai_reply = ? WHERE id = ?', ['replied', customText, id]);
-  } else {
-    run('UPDATE messages SET status = ? WHERE id = ?', ['replied', id]);
-  }
-  saveDb();
+  const msg = queryOne('SELECT * FROM messages WHERE id = ? AND user_id = ?', [id, userId]);
+  if (!msg) return res.status(404).json({ error: '消息不存在' });
 
-  res.json({ status: 'sent' });
+  const msgData = msg as any;
+
+  // Get email config from DB
+  const conn = queryOne("SELECT * FROM tool_connections WHERE user_id = ? AND tool_id = 'email_imap' AND status = 'active'", [userId]);
+  if (!conn) return res.status(400).json({ error: '邮箱未连接，请先连接邮箱' });
+
+  const connData = conn as any;
+  const cfg = JSON.parse(connData.access_token_encrypted || '{}');
+  const password = connData.refresh_token_encrypted ? decrypt(connData.refresh_token_encrypted) : '';
+
+  const replyText = customText || msgData.ai_reply || '';
+  const subject = msgData.subject || '';
+
+  try {
+    await sendReply({ ...cfg, password }, msgData.from_address, subject, replyText);
+    run('UPDATE messages SET status = ?, ai_reply = ? WHERE id = ? AND user_id = ?', ['replied', replyText, id, userId]);
+    res.json({ status: 'sent' });
+  } catch (err: any) {
+    res.status(500).json({ error: `发送失败: ${err.message}` });
+  }
 });
 
 export { router as messageRoutes };

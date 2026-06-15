@@ -1,20 +1,33 @@
 import { ReactNode, createContext, useContext, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useUser } from '../contexts/UserContext';
 
 // Demo mode context — provides sample data when no API keys are set
 export const DemoContext = createContext<{ demo: boolean; toggleDemo: () => void }>({ demo: true, toggleDemo: () => {} });
 export const useDemo = () => useContext(DemoContext);
 
-const navItems = [
+interface NavItem { to: string; icon: string; label: string; labelEn: string; badge?: number; }
+
+const navItems: NavItem[] = [
   { to: '/', icon: '◧', label: '面板', labelEn: 'Dashboard' },
-  { to: '/inbox', icon: '↓', label: '收件箱', labelEn: 'Inbox', badge: 3 },
-  { to: '/invoices', icon: '⏐', label: '发票', labelEn: 'Invoices', badge: 2 },
+  { to: '/clients', icon: '👥', label: '客户管理', labelEn: 'Clients' },
+  { to: '/invoices', icon: '📄', label: '发票', labelEn: 'Invoices' },
+  { to: '/proposals', icon: '📋', label: '提案', labelEn: 'Proposals' },
   { to: '/settings', icon: '⚙', label: '设置', labelEn: 'Settings' },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const [demo, setDemo] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { user, logout } = useUser();
+  const navigate = useNavigate();
   const location = useLocation();
+  const avatarChar = user?.name?.[0] || 'E';
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <DemoContext.Provider value={{ demo, toggleDemo: () => setDemo(!demo) }}>
@@ -32,7 +45,35 @@ export default function Layout({ children }: { children: ReactNode }) {
                   演示模式
                 </span>
               )}
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #007AFF, #5856D6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700 }}>E</div>
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setMenuOpen(!menuOpen)} style={{
+                  width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #007AFF, #5856D6)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: 13, fontWeight: 700, padding: 0,
+                }}>{avatarChar}</button>
+                {menuOpen && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 90 }} onClick={() => setMenuOpen(false)} />
+                    <div style={{
+                      position: 'absolute', top: 38, right: 0, zIndex: 100,
+                      background: '#fff', borderRadius: 14, padding: 6,
+                      boxShadow: '0 4px 24px rgba(0,0,0,.12)', minWidth: 160,
+                    }}>
+                      <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,.06)', marginBottom: 4 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1D1D1F' }}>{user?.name || '用户'}</div>
+                        <div style={{ fontSize: 11, color: '#AEAEB2' }}>{user?.email || ''}</div>
+                      </div>
+                      <button onClick={() => { setMenuOpen(false); navigate('/settings'); }} style={menuItemStyle}>
+                        ⚙ 设置
+                      </button>
+                      <button onClick={() => { setMenuOpen(false); handleLogout(); }} style={{ ...menuItemStyle, color: '#FF3B30' }}>
+                        ↩ 退出登录
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -72,3 +113,9 @@ export default function Layout({ children }: { children: ReactNode }) {
     </DemoContext.Provider>
   );
 }
+
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', padding: '8px 12px', borderRadius: 8,
+  border: 'none', background: 'none', fontSize: 13, fontWeight: 500,
+  color: '#1D1D1F', cursor: 'pointer', textAlign: 'left' as const,
+};

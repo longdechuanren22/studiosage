@@ -55,6 +55,11 @@ body {
 }
 .page-enter { animation: pageIn .25s cubic-bezier(.4,0,.2,1); }
 
+/* Spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* iOS-style toggle */
 .toggle-track {
   width: 44px; height: 24px; background: rgba(0,0,0,.12); border-radius: 12px;

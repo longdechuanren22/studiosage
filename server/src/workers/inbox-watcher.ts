@@ -2,15 +2,16 @@
 import { randomUUID } from 'node:crypto';
 import { GmailAdapter } from '../adapters/gmail.js';
 import { classifyMessage } from '../ai/engine.js';
-import { initDb, saveDb } from '../db/schema.js';
+import { initDb } from '../db/schema.js';
 import { queryOne, run } from '../db/query.js';
 
 let running = false;
 
-export async function startInboxWatcher(intervalMs = 60000) {
+export async function startInboxWatcher(intervalMs = 60000, userId?: string) {
   if (running) return;
   running = true;
-  console.log(`[InboxWatcher] Polling every ${intervalMs / 1000}s`);
+  const uid = userId || 'default';
+  console.log(`[InboxWatcher] Polling every ${intervalMs / 1000}s (user: ${uid})`);
 
   const poll = async () => {
     try {
@@ -31,9 +32,8 @@ export async function startInboxWatcher(intervalMs = 60000) {
 
         run(`INSERT INTO messages (id, user_id, from_address, subject, body, category, status, ai_reply)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [randomUUID()!, 'default', full.from || '', full.subject || '', full.body || '',
+          [randomUUID()!, uid, full.from || '', full.subject || '', full.body || '',
            classification.category, 'pending', classification.suggestedReply]);
-        saveDb();
       }
     } catch (err) {
       console.error('[InboxWatcher]', (err as Error).message);
