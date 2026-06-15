@@ -11,25 +11,39 @@ const URGENT_PATTERNS = [
 // Broad spam detection: newsletters, promos, receipts, automated, social, etc.
 // Includes Chinese-language spam patterns (QQ/163/126 mailboxes)
 const SPAM_PATTERNS = [
-  // ── Known spam domains (REAL data from QQ mailbox) ──
+  // ── Universal: domain + sender patterns (language-agnostic) ──
   /@linkedin\.com/i, /@steampowered\.com/i, /@newsletter\./i,
   /noreply@/i, /no-reply@/i, /jobs-listings@/i, /messages-noreply@/i,
-  /invitations@linkedin/i,
+  /invitations@linkedin/i, /^donotreply@/i, /^mailer-daemon@/i,
+  /@facebookmail\.com/i, /@amazon\.com/i, /@netflix\.com/i,
 
-  // ── Subject-based spam (from REAL emails seen in inbox) ──
-  /\(AD\)|（广告）|\[广告\]/,           // NIKE
-  /会员.*开通|会员.*到期|VIP.*开通/,      // Tencent
-  /星座|运势|horoscope/i,                // 星星一族
-  /特卖|促销|折扣|优惠|降价|打折|清仓|甩卖/,  // Steam
-  /招聘|求职|简历|猎头|内推|offer|面试/,   // LinkedIn
-  /职业.*档案|职业.*背景|看过.*档案/,       // LinkedIn
-  /添加.*好友|认可.*成就|成为.*好友/,       // LinkedIn
-  /专属推荐|为你推荐|猜你喜欢|精选推荐/,
+  // ── Universal: content patterns (language-agnostic) ──
+  /unsubscribe/i, /opt.out/i, /email preferences/i, /update.*(subscription|preferences)/i,
+  /view (in|online|as webpage|in browser)/i,
+  /(weekly|monthly|daily).*(newsletter|digest|roundup)/i,
+  /(webinar|free ebook|whitepaper|case study)/i,
+  /limited.time.offer|act.now|don't miss out|exclusive deal/i,
+  /(sale|discount|promo|clearance).*(off|code|ends|save|up to)/i,
+  /(shipping|tracking|package|delivery).*(update|confirm|notification)/i,
+  /(order|receipt|purchase).*(confirm|#|number)/i,
+  /congratulations.*(winner|won|selected|chosen)/i,
+  /earn.*(money|cash|income).*(home|online)/i,
+  /casino|gambling|poker|betting|lottery/i,
+  /pharmacy|viagra|cialis|weight.loss/i,
+  /loan.*(approv|low.rate)|credit.*repair/i,
+  /\b(SEO|backlink|guest post|sponsor|followers|traffic)\b/i,
+  /(facebook|instagram|linkedin|twitter|tiktok|snapchat|pinterest).*(notif|mention|follow|like|comment)/i,
 
-  // ── Generic Chinese spam ──
-  /广告|营销|推广|满减|秒杀|特价/,
-  /订阅|退订|不再接收|邮件订阅|邮件列表|mailing list/i,
-  /系统通知|系统邮件|自动发送|自动生成|请勿回复|do not reply/i,
+  // ── Supplementary: Chinese spam (common for QQ/163/126 mailboxes) ──
+  /\(AD\)|（广告）|\[广告\]/,
+  /会员.*开通|会员.*到期|VIP.*开通/,
+  /星座|运势|horoscope/i,
+  /特卖|促销|折扣|优惠|降价|打折|清仓|甩卖|秒杀|特价/,
+  /招聘|求职|简历|猎头|内推|offer|面试/,
+  /职业.*档案|职业.*背景|看过.*档案|添加.*好友|认可.*成就/,
+  /广告|营销|推广|满减|专属推荐|为你推荐|猜你喜欢|精选推荐/,
+  /订阅|退订|不再接收|邮件订阅|邮件列表/,
+  /系统通知|系统邮件|自动发送|自动生成|请勿回复/,
   /验证码|验证邮件|激活账号|激活账户|安全提醒|安全通知|登录提醒|异地登录/,
   /账单|对账|流水|交易提醒|消费提醒|扣款通知|还款提醒/,
   /快递|物流|配送|发货|收货|包裹|签收|运单/,
@@ -142,20 +156,19 @@ function detectStage(body: string, subject: string): string {
 function detectCategory(body: string, subject: string): 'urgent' | 'normal' | 'spam' {
   const text = subject + ' ' + body;
 
-  // Urgent check first
+  // Urgent check first (language-agnostic: cancel/refund/urgent/emergency)
   if (URGENT_PATTERNS.some(p => p.test(text))) return 'urgent';
 
   const spamMatches = SPAM_PATTERNS.filter(p => p.test(text)).length;
   const bizMatches = BUSINESS_PATTERNS.filter(p => p.test(text)).length;
-  const isShort = text.length < 200;
 
-  // Only mark as spam if OVERWHELMING evidence — false positive is worse than false negative
-  // 3+ spam signals, zero business → definitely spam
+  // Only mark spam if overwhelming evidence (language-agnostic threshold)
+  // 3+ spam signals AND zero business signals = spam
   if (spamMatches >= 3 && bizMatches === 0) return 'spam';
-  // 2+ spam signals on a short message with zero business → likely spam
-  if (spamMatches >= 2 && bizMatches === 0 && isShort) return 'spam';
+  // 5+ spam signals even with some business context = spam
+  if (spamMatches >= 5 && bizMatches <= 2) return 'spam';
 
-  // Everything else: normal (let human review borderline cases)
+  // Default: normal (false negatives > false positives)
   return 'normal';
 }
 

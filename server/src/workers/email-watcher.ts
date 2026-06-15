@@ -158,70 +158,104 @@ function detectServiceType(subject: string, body: string): string | null {
   return null;
 }
 
-// Known non-client domains — these are ALWAYS spam/marketing
-const NON_CLIENT_DOMAINS = [
-  'linkedin.com', 'steampowered.com', 'tencent.com', 'nike.com', 'nike.com.cn',
-  'newsletter.', 'horoscopofree.com', 'amazon.com', 'aliexpress.com',
-  'jd.com', 'taobao.com', 'tmall.com', 'pinduoduo.com',
+// ── Language-agnostic spam detection ──
+// Strategy: domain reputation + email structure > content keywords
+
+// Known platform/notification domains — never photography clients
+const PLATFORM_DOMAINS = [
+  // Social / professional
+  'linkedin.com', 'facebook.com', 'facebookmail.com', 'instagram.com',
+  'twitter.com', 'tiktok.com', 'snapchat.com', 'pinterest.com',
+  // E-commerce / marketing
+  'amazon.com', 'aliexpress.com', 'ebay.com', 'etsy.com',
+  'nike.com', 'adidas.com', 'steampowered.com', 'epicgames.com',
+  // Streaming / media
+  'netflix.com', 'spotify.com', 'youtube.com', 'twitch.tv',
+  'tencent.com', 'iqiyi.com', 'youku.com', 'bilibili.com',
+  // Payment / finance
+  'paypal.com', 'stripe.com', 'square.com', 'venmo.com',
+  // Travel / booking
+  'airbnb.com', 'booking.com', 'expedia.com', 'trip.com',
+  'uber.com', 'lyft.com', 'doordash.com',
+  // Newsletter platforms
+  'mailchimp', 'sendgrid', 'constantcontact', 'convertkit',
+  'substack.com', 'medium.com', 'ghost.io',
+  // Job platforms
+  'indeed.com', 'monster.com', 'glassdoor.com', 'ziprecruiter.com',
+  // Domain & hosting
+  'godaddy.com', 'namecheap.com', 'wix.com', 'squarespace.com',
 ];
 
-function isNonClientDomain(email: string): boolean {
-  return NON_CLIENT_DOMAINS.some(d => email.toLowerCase().includes(d));
+// Email addresses that are always automated
+const AUTOMATED_SENDERS = [
+  /^noreply@/i, /^no-reply@/i, /^donotreply@/i, /^mailer-daemon@/i,
+  /^bounce/i, /^postmaster@/i, /^notifications?@/i, /^messages-noreply@/i,
+  /^jobs-listings@/i, /^invitations@/i, /^newsletter@/i, /^marketing@/i,
+  /^promo@/i, /^deals@/i, /^offers@/i, /^sales@/i, /^info@/i,
+  /^admin@/i, /^support@/i, /^service@/i, /^hello@/i, /^team@/i,
+];
+
+function isPlatformDomain(email: string): boolean {
+  return PLATFORM_DOMAINS.some(d => email.toLowerCase().includes(d));
 }
 
-// Conservative spam scoring based on REAL email analysis
+function isAutomatedSender(email: string): boolean {
+  return AUTOMATED_SENDERS.some(p => p.test(email));
+}
+
 // Returns 0-5, threshold >= 3 = spam
 function calcSpamScore(subject: string, body: string, isKnownSender: boolean, fromEmail: string): number {
   const text = (subject + ' ' + body.slice(0, 1000)).toLowerCase();
   let score = 0;
 
-  // Known non-client domain → instant +2 (LinkedIn, Steam, Nike, etc.)
-  if (fromEmail && isNonClientDomain(fromEmail)) score += 2;
+  // ── Language-agnostic signals ──
 
-  // Strong spam signals (each adds 1 point)
-  const strongSpam = [
-    /unsubscribe|opt.out|email preferences|update your subscription/i,
+  // Platform domain (LinkedIn, Facebook, Amazon, Netflix...) → +2
+  if (fromEmail && isPlatformDomain(fromEmail)) score += 2;
+
+  // Automated sender address (noreply, notifications, marketing...) → +1
+  if (fromEmail && isAutomatedSender(fromEmail)) score += 1;
+
+  // HTML-only email (no plain text body, only HTML tags) → +1
+  if (body && /^\s*(<html|<head|<body|<div|<table|<meta|<script|<![ \t\n]*$)/i.test(body.trim())) score += 1;
+
+  // Tracking pixels / beacons → +1
+  if (/<img[^>]+(tracking|pixel|beacon|1x1|0x0)[^>]*>/i.test(body)) score += 1;
+  if (/opencount|openrate|clickthrough|utm_/i.test(body)) score += 1;
+
+  // Unsubscribe / email preference links → +1
+  if (/unsubscribe|opt.out|email preferences|update.*(subscription|preferences)/i.test(text)) score += 1;
+
+  // Bulk mail headers / view-in-browser → +1
+  if (/view (in|online|as webpage|in browser)/i.test(text)) score += 1;
+
+  // ── Generic spam content patterns (language-agnostic) ──
+  const spamContent = [
     /\b(SEO|backlink|guest post|sponsor)\b/i,
     /(buy|purchase).*(followers|likes|traffic|views)/i,
-    /congratulations.*(winner|won|selected|chosen)/i,
-    /earn.*(money|cash|income|dollar).*(home|online)/i,
-    /limited.time.offer|act.now|don't miss out|exclusive deal/i,
-    /casino|gambling|poker|betting|lottery|jackpot/i,
-    /adult|xxx|porn|escort|dating site/i,
-    /pharmacy|viagra|cialis|weight loss pill|diet pill/i,
-    /work.from.home.*(earn|income|salary)/i,
-    /loan.*approv|credit.*repair|debt.*(relief|consolidat)/i,
-    /invoice.*(attachment|attached|overdue|unpaid).*scam/i,
-    /verify.*(account|identity|payment).*click/i,
-    /security.*(alert|breach|compromis).*verify/i,
-    /nigerian|prince|inheritance|western union|money transfer/i,
+    /earn.*(money|cash|income).*(home|online)/i,
+    /casino|gambling|poker|betting|lottery/i,
+    /pharmacy|viagra|cialis|weight.loss/i,
+    /loan.*(approv|low.rate)|credit.*repair|debt.*(relief|consolidat)/i,
+    /nigerian|prince|inheritance|western.union/i,
   ];
-  for (const p of strongSpam) { if (p.test(text)) score += 1; }
+  for (const p of spamContent) { if (p.test(text)) score += 1; }
 
-  // Bulk/marketing signals (each adds 0.5, rounded up)
-  const bulkSignals = [
-    /view (in|online|as webpage|in browser)/i,
-    /(weekly|monthly|daily).*(newsletter|digest|roundup)/i,
-    /(webinar|free ebook|whitepaper|case study)/i,
-    /(sale|discount|promo|clearance).*(off|code|ends)/i,
-    /(shipping|tracking|package|delivery).*(update|confirm|notification)/i,
-    /(order|receipt|purchase).*(confirm|#|number)/i,
-    /(facebook|instagram|linkedin|twitter|tiktok|snapchat|pinterest).*(notif|mention|follow)/i,
-    /(cloud|drive|storage).*(full|upgrade|limit)/i,
-  ];
-  let bulkCount = bulkSignals.filter(p => p.test(text)).length;
-  score += Math.ceil(bulkCount * 0.5);
+  // ── Bonus: subject looks promotional ──
+  if (/(sale|discount|promo|clearance|flash|limited|exclusive|deal|offer|save|shop|buy|order|shipping|delivery|tracking|receipt|purchase)/i.test(subject)) score += 1;
 
-  // From known sender → -2 points (unlikely to be spam)
+  // ── Mitigations ──
+
+  // Known photography client → -2 (strong signal it's real)
   if (isKnownSender) score -= 2;
 
-  // Looks like a real person writing → -1 point
+  // Email looks like a real person wrote it → -1
   const humanSignals = [
-    /\?/, // Has a question
+    /\?/,                                                   // Question
     /^(hi|hey|hello|dear|good morning|good afternoon)\b/im, // Greeting
-    /(thanks|thank you|appreciate|best regards|cheers)/i, // Polite closing
-    /^(my name is|I am|I'm|we are|we're)\b/im, // Self-introduction
-    /(looking for|interested in|do you|could you|would you|can you|wondering if)/i, // Inquiry language
+    /(thanks|thank you|appreciate|best|regards|cheers)/i,    // Polite closing
+    /^(my name is|I am|I'm|we are|we're)\b/im,              // Self-introduction
+    /(looking for|interested in|do you|could you|would you|can you|wondering)/i, // Inquiry
   ];
   if (humanSignals.some(p => p.test(text))) score -= 1;
 
