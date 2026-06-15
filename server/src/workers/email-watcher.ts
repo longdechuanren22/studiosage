@@ -7,6 +7,7 @@ import { extractEntities } from '../ai/rules-engine.js';
 import { initDb } from '../db/schema.js';
 import { queryOne, queryAll, run } from '../db/query.js';
 import { findOrCreateClient } from '../api/clients.js';
+import { notifyMessage, notifyClientUpdated } from '../utils/events.js';
 
 let running = false;
 
@@ -104,7 +105,14 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
               run("UPDATE clients SET name = ?, updated_at = datetime('now') WHERE id = ? AND (name = ? OR name LIKE '%@%')",
                 [bestName, client.id, client.name]);
             }
+            // Push real-time event
+            notifyClientUpdated(uid, client.id, 'engaged');
           }
+          // Push real-time event
+          notifyMessage(uid, {
+            id: msgId, from_address: msg.from, subject: msg.subject,
+            client_id: client?.id || null, category: classification.category, status: isSpam ? 'archived' : 'pending',
+          });
 
           // ── Extract key entities from message ──
           const entities = extractEntities(msg.body || '', msg.subject || '');

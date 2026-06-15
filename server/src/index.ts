@@ -75,6 +75,19 @@ app.use('/api/portal', portalRoutes);              // client portal — token-ba
 // ── Protected routes (JWT required) ──
 app.use('/api/messages', authenticate, messageRoutes);
 app.use('/api/invoices', authenticate, invoiceRoutes);
+// SSE stream — token via query param (EventSource can't set headers)
+app.get('/api/dashboard/stream', async (req, res) => {
+  const token = req.query.token as string;
+  if (!token) { res.status(401).json({ error: 'Missing token' }); return; }
+  try {
+    const { verifyToken } = await import('./middleware/auth.js');
+    const payload = verifyToken(token);
+    const { subscribe } = await import('./utils/events.js');
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders();
+    subscribe(payload.userId, res);
+  } catch { res.status(401).json({ error: 'Invalid token' }); }
+});
 app.use('/api/dashboard', authenticate, dashboardRoutes);
 app.use('/api/settings', authenticate, settingsRoutes);
 app.use('/api/clients', authenticate, clientRoutes);

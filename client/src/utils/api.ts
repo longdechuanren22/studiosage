@@ -21,9 +21,11 @@ async function request<T = any>(method: string, url: string, body?: unknown): Pr
 
   if (res.status === 401) {
     clearToken();
-    // Reload to show login state
-    if (!url.includes('/api/auth/')) window.location.reload();
-    throw new Error('未登录');
+    // Redirect to login — preserve basename
+    if (!url.includes('/api/auth/')) {
+      window.location.href = '/sage/login';
+    }
+    throw new Error('Session expired');
   }
 
   const data = await res.json();

@@ -24,8 +24,19 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, 10000);
-    return () => clearInterval(t);
+
+    // SSE real-time stream — replaces polling
+    const token = localStorage.getItem('studiosage_token');
+    if (!token) return;
+    const es = new EventSource(`/api/dashboard/stream?token=${encodeURIComponent(token)}`);
+    es.onmessage = () => fetchData(); // fallback
+    es.addEventListener('message:new', () => fetchData());
+    es.addEventListener('message:replied', () => fetchData());
+    es.addEventListener('invoice:updated', () => fetchData());
+    es.addEventListener('client:updated', () => fetchData());
+    es.onerror = () => { /* SSE disconnected, will fall back to manual refresh */ };
+
+    return () => { es.close(); };
   }, []);
 
   const fetchData = async () => {
