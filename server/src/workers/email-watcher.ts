@@ -54,6 +54,9 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
         const spamScore = calcSpamScore(msg.subject || '', msg.body || '', isKnownSender, fromEmail || '');
         const isSpam = classification.category === 'spam' || spamScore >= 3;
 
+        // Debug: log every decision
+        console.log(`[EmailWatcher] ${isSpam ? 'SPAM' : 'OK'} score=${spamScore} known=${isKnownSender} | ${msg.subject?.slice(0, 50)} | ${(fromEmail || '').slice(0, 40)}`);
+
         // Determine best name: body signature > email header > email username
         const bestName = bodyName || fromName;
 

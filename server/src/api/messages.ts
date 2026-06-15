@@ -34,7 +34,7 @@ router.get('/stats', async (req, res) => {
   res.json({ newMessages: newCount, repliedCount, urgentCount, totalCount });
 });
 
-// Incoming message from email watcher
+// Incoming message — used by email watcher AND as a public API
 router.post('/incoming', async (req, res) => {
   await initDb();
   const userId = req.userId!;
@@ -48,12 +48,19 @@ router.post('/incoming', async (req, res) => {
 
   const classification = await classifyMessage(body, subject || '', clientContext);
 
+  // Spam check: apply the same conservative scoring as the email watcher
+  const fromEmail = (from || '').match(/<([^>]+)>/)?.[1] || from || '';
+  const isKnownClient = !!clientId && !!queryOne('SELECT id FROM clients WHERE id = ?', [clientId]);
+  const spamScore = calcIncomingSpamScore(subject || '', body || '', isKnownClient, fromEmail);
+  const isSpam = classification.category === 'spam' || spamScore >= 3;
+
   run(`INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, userId, clientId || null, from || '', subject || '', body || '',
-     classification.category, 'pending', classification.suggestedReply, new Date().toISOString()]);
+     classification.category, isSpam ? 'archived' : 'pending',
+     isSpam ? '' : classification.suggestedReply, new Date().toISOString()]);
 
-  res.json({ id, ...classification });
+  res.json({ id, ...classification, isSpam, spamScore });
 });
 
 // Update AI reply (user edits the draft)
@@ -101,5 +108,32 @@ router.post('/:id/send', async (req, res) => {
     res.status(500).json({ error: `Send failed: ${err.message}` });
   }
 });
+
+// Shared spam scoring (mirrors email-watcher logic for the API endpoint)
+const PLATFORM_DOMAINS = [
+  'linkedin.com', 'facebook.com', 'facebookmail.com', 'instagram.com', 'twitter.com',
+  'tiktok.com', 'snapchat.com', 'pinterest.com', 'amazon.com', 'aliexpress.com',
+  'ebay.com', 'etsy.com', 'nike.com', 'adidas.com', 'steampowered.com', 'epicgames.com',
+  'netflix.com', 'spotify.com', 'youtube.com', 'twitch.tv', 'tencent.com',
+  'iqiyi.com', 'youku.com', 'bilibili.com', 'paypal.com', 'stripe.com',
+  'airbnb.com', 'booking.com', 'expedia.com', 'uber.com', 'lyft.com',
+  'mailchimp', 'sendgrid', 'constantcontact', 'substack.com', 'medium.com',
+  'indeed.com', 'monster.com', 'glassdoor.com', 'godaddy.com', 'wix.com',
+];
+const AUTO_SENDERS = /^(noreply|no-reply|donotreply|mailer-daemon|bounce|postmaster|notifications?|messages-noreply|jobs-listings|invitations|newsletter|marketing|promo|deals|offers|sales)@/i;
+
+function calcIncomingSpamScore(subject: string, body: string, isKnownClient: boolean, fromEmail: string): number {
+  const text = (subject + ' ' + body.slice(0, 1000)).toLowerCase();
+  let score = 0;
+  if (fromEmail && PLATFORM_DOMAINS.some(d => fromEmail.toLowerCase().includes(d))) score += 2;
+  if (fromEmail && AUTO_SENDERS.test(fromEmail)) score += 1;
+  if (body && /^\s*(<html|<head|<body|<div|<meta)/i.test(body.trim())) score += 1;
+  if (/(unsubscribe|opt.out|email preferences|view (in|online) browser)/i.test(text)) score += 1;
+  if (/(sale|discount|promo|clearance|flash|limited|exclusive|deal|offer|shop|buy).*(off|code|ends|save|up to)/i.test(subject)) score += 1;
+  if (isKnownClient) score -= 2;
+  if (/\?/.test(text)) score -= 1;
+  if (/^(hi|hey|hello|dear)\b/im.test(text)) score -= 1;
+  return Math.max(0, score);
+}
 
 export { router as messageRoutes };
