@@ -91,10 +91,27 @@ export default function Invoices() {
     );
   };
 
-  const handleDownloadPdf = (inv: Invoice) => {
+  const handleDownloadPdf = async (inv: Invoice) => {
     if (demo) { toast('演示模式：PDF 下载功能已就绪', 'info'); return; }
-    const pdfUrl = `/api/invoices/${inv.id}/pdf`;
-    window.open(pdfUrl, '_blank');
+    try {
+      const token = localStorage.getItem('studiosage_token');
+      const res = await fetch(`/api/invoices/${inv.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('下载失败');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${inv.id.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('PDF 下载中…', 'success');
+    } catch {
+      toast('PDF 下载失败，请重试', 'error');
+    }
   };
 
   const paid = invoices.filter(i => i.status === 'paid');

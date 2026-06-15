@@ -30,12 +30,16 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
 
         const classification = await classifyMessage(msg.body || '', msg.subject || '');
 
+        // Spam messages are stored but immediately archived — won't clutter the inbox
+        const isSpam = classification.category === 'spam';
+
         run(`INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, channel, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [randomUUID()!, uid, client?.id || null, msg.from || '', msg.subject || '', msg.body || '',
-           classification.category, 'pending', classification.suggestedReply, 'email', msg.date.toISOString()]);
+           classification.category, isSpam ? 'archived' : 'pending',
+           isSpam ? '' : classification.suggestedReply, 'email', msg.date.toISOString()]);
 
-        if (client) {
+        if (client && !isSpam) {
           run("UPDATE clients SET stage = ?, updated_at = datetime('now') WHERE id = ? AND stage = 'inquiry'",
             ['engaged', client.id]);
         }

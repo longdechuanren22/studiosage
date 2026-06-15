@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
+import { useDemo } from '../components/Layout';
 import { api } from '../utils/api';
 
 interface DashboardData {
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { user } = useUser();
+  const { demo } = useDemo();
   const displayName = user?.name || 'Emma';
 
   useEffect(() => {
@@ -50,6 +52,14 @@ export default function Dashboard() {
   const totalInPipeline = d ? Object.values(d.pipeline).reduce((a, b) => a + b, 0) : 0;
   const maxPipeline = d ? Math.max(...Object.values(d.pipeline), 1) : 1;
 
+  // Determine "attention needed" items
+  const attentionItems: { label: string; count: number; nav: string; color: string }[] = [];
+  if (d) {
+    if (d.stats.urgentCount > 0) attentionItems.push({ label: '紧急消息', count: d.stats.urgentCount, nav: '/clients', color: '#FF3B30' });
+    if (d.stats.pendingClients > 0) attentionItems.push({ label: '待回复客户', count: d.stats.pendingClients, nav: '/clients', color: '#FF9500' });
+    if (d.stats.newMessages > 0) attentionItems.push({ label: '新消息', count: d.stats.newMessages, nav: '/clients', color: '#007AFF' });
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Header */}
@@ -59,94 +69,133 @@ export default function Dashboard() {
         </h2>
         <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>
           {!d ? '连接邮箱后自动显示业务总览' :
-            d.stats.pendingClients > 0
-              ? `${d.stats.pendingClients} 个客户待处理 · ${d.stats.newMessages} 条新消息${
-                  d.stats.urgentCount > 0 ? ` · ${d.stats.urgentCount} 条紧急` : ''}`
+            attentionItems.length > 0
+              ? attentionItems.map(a => `${a.count} ${a.label}`).join(' · ')
               : d.stats.activeProjects > 0
-                ? `${d.stats.activeProjects} 个进行中项目 · ${totalInPipeline} 个客户`
-                : '暂无待处理事项 ✓'}
+                ? `${d.stats.activeProjects} 个进行中项目 · 一切正常`
+                : '一切就绪 ☀️'}
         </p>
       </div>
 
-      {/* Email not connected prompt */}
-      {!d && (
-        <a href="/connect" style={{ textDecoration: 'none' }}>
-          <div style={{
+      {/* Email not connected — primary CTA */}
+      {(!d || totalInPipeline === 0) && (
+        <div
+          onClick={() => navigate('/connect')}
+          style={{
             background: 'linear-gradient(135deg, rgba(0,122,255,.08), rgba(88,86,214,.06))',
             borderRadius: 16, padding: 24, cursor: 'pointer',
             border: '1px dashed rgba(0,122,255,.2)', textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>📬</div>
-            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.1px', marginBottom: 4 }}>连接你的工作邮箱</div>
-            <div style={{ fontSize: 12, color: '#86868B' }}>连接后 AI 自动读取邮件、分类客户、起草回复</div>
+          }}
+        >
+          <div style={{ fontSize: 36, marginBottom: 8 }}>📬</div>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.1px', marginBottom: 4 }}>
+            连接工作邮箱，AI 接管客户沟通
           </div>
-        </a>
+          <div style={{ fontSize: 12, color: '#86868B' }}>
+            邮件到达 → 自动识别客户 → AI 分类 + 起草回复 → 你审核发送
+          </div>
+        </div>
       )}
 
-      {/* Stats row — client-centric */}
+      {/* Attention needed — actionable alerts */}
+      {attentionItems.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {attentionItems.map(item => (
+            <button
+              key={item.label}
+              onClick={() => navigate(item.nav)}
+              style={{
+                width: '100%', background: '#fff', borderRadius: 14, padding: '14px 16px',
+                border: 'none', cursor: 'pointer', textAlign: 'left',
+                boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: item.color + '14',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18,
+              }}>
+                {item.label === '紧急消息' ? '🔴' : item.label === '待回复客户' ? '📨' : '✉️'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-.1px' }}>
+                  {item.count} 个{item.label}
+                </div>
+                <div style={{ fontSize: 12, color: '#86868B' }}>
+                  {item.label === '紧急消息' ? '需要立即处理' : item.label === '待回复客户' ? '等待你的回复' : '查看新消息'}
+                </div>
+              </div>
+              <span style={{ color: '#AEAEB2', fontSize: 14 }}>→</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Stats row — clickable */}
       {d && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
           <StatCard
-            value={d.stats.pendingClients}
-            label="待处理客户"
-            color={d.stats.pendingClients > 0 ? '#FF3B30' : '#AEAEB2'}
+            value={d.stats.pendingClients} label="待回复" color={d.stats.pendingClients > 0 ? '#FF9500' : '#AEAEB2'}
+            onClick={() => navigate('/clients')}
           />
           <StatCard
-            value={d.stats.newMessages}
-            label="新消息"
-            color={d.stats.newMessages > 0 ? '#FF9500' : '#AEAEB2'}
+            value={d.stats.activeProjects} label="进行中" color="#007AFF"
+            onClick={() => navigate('/clients')}
           />
           <StatCard
-            value={d.stats.activeProjects}
-            label="进行中"
-            color="#007AFF"
+            value={d.stats.newMessages} label="新消息" color={d.stats.newMessages > 0 ? '#007AFF' : '#AEAEB2'}
+            onClick={() => navigate('/clients')}
           />
           <StatCard
-            value={`¥${(d.stats.revenueThisMonth || 0).toLocaleString()}`}
-            label="本月收入"
-            color={d.stats.revenueThisMonth > 0 ? '#34C759' : '#AEAEB2'}
+            value={d.stats.revenueThisMonth > 0 ? `¥${d.stats.revenueThisMonth.toLocaleString()}` : '$0'}
+            label="本月收入" color={d.stats.revenueThisMonth > 0 ? '#34C759' : '#AEAEB2'}
+            onClick={() => navigate('/invoices')}
           />
         </div>
       )}
 
-      {/* Pipeline bar */}
+      {/* Pipeline + stage breakdown */}
       {d && totalInPipeline > 0 && (
         <div style={{ background: '#fff', borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#1D1D1F', marginBottom: 12, letterSpacing: '-.1px' }}>
-            📊 业务阶段
+            📊 客户阶段 — {totalInPipeline} 位客户
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
             {pipelineStages.map(stage => {
               const count = d.pipeline[stage] || 0;
               const height = Math.max(4, (count / maxPipeline) * 80);
               return (
-                <div key={stage} style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, color: stage === 'delivered' ? '#34C759' : '#1D1D1F' }}>
-                    {count}
-                  </div>
+                <button
+                  key={stage}
+                  onClick={() => navigate('/clients')}
+                  style={{
+                    flex: 1, textAlign: 'center', border: 'none', background: 'none',
+                    cursor: count > 0 ? 'pointer' : 'default', padding: 0,
+                  }}
+                >
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, marginBottom: 6,
+                    color: count > 0 ? '#1D1D1F' : '#C7C7CC',
+                  }}>{count}</div>
                   <div style={{
                     height, borderRadius: '6px 6px 0 0',
-                    background: stage === 'delivered' ? 'rgba(52,199,89,.3)'
-                      : stage === 'inquiry' ? 'rgba(0,122,255,.25)'
-                      : 'rgba(0,122,255,.5)',
+                    background: count > 0
+                      ? stage === 'delivered' ? 'rgba(52,199,89,.35)'
+                      : 'rgba(0,122,255,.5)'
+                      : 'rgba(0,0,0,.05)',
+                    transition: 'height .3s',
                   }} />
                   <div style={{ fontSize: 10, color: '#AEAEB2', marginTop: 6 }}>{stageNames[stage]}</div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* Quick actions */}
-      {d && (
-        <div style={{ display: 'flex', gap: 10 }}>
-          <QuickBtn icon="➕" label="新建客户" onClick={() => navigate('/clients')} />
-          <QuickBtn icon="📬" label="连接邮箱" onClick={() => navigate('/connect')} />
-        </div>
-      )}
-
-      {/* Recent client activity */}
+      {/* Recent client activity — with clear call to action */}
       {d && d.recentActivity.length > 0 && (
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#1D1D1F', marginBottom: 10, letterSpacing: '-.1px' }}>
@@ -164,37 +213,46 @@ export default function Dashboard() {
                   boxShadow: '0 1px 3px rgba(0,0,0,.04)',
                 }}
               >
+                {/* Avatar */}
                 <div style={{
-                  width: 36, height: 36, borderRadius: '50%',
-                  background: `hsl(${i * 50}, 60%, 55%)`,
+                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                  background: `hsl(${i * 50 + 200}, 50%, 55%)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0,
+                  color: '#fff', fontSize: 14, fontWeight: 700,
                 }}>
                   {item.client_name?.[0]?.toUpperCase() || '?'}
                 </div>
+
+                {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2, letterSpacing: '-.1px' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-.1px', marginBottom: 2 }}>
                     {item.client_name}
                     <span style={{
-                      fontSize: 10, fontWeight: 500, marginLeft: 8, padding: '1px 6px', borderRadius: 6,
-                      background: 'rgba(0,122,255,.06)', color: '#007AFF',
+                      fontSize: 10, fontWeight: 500, marginLeft: 8, padding: '2px 6px', borderRadius: 6,
+                      background: item.stage === 'delivered' ? 'rgba(52,199,89,.08)' : 'rgba(0,122,255,.06)',
+                      color: item.stage === 'delivered' ? '#34C759' : '#007AFF',
                     }}>
                       {stageNames[item.stage] || item.stage}
                     </span>
                   </div>
                   <div style={{ fontSize: 12, color: '#86868B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.last_subject || '(无主题)'}
+                    {item.pending > 0 ? '📨 ' : ''}{item.last_subject || '(无消息)'}
                     <span style={{ color: '#AEAEB2', marginLeft: 8 }}>{timeAgo(item.last_message_at)}</span>
                   </div>
                 </div>
+
+                {/* Pending badge */}
                 {item.pending > 0 && (
                   <span style={{
                     background: '#FF3B30', color: '#fff', fontSize: 11, fontWeight: 700,
-                    padding: '2px 8px', borderRadius: 10, flexShrink: 0,
+                    minWidth: 20, height: 20, borderRadius: 10, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    padding: '0 6px',
                   }}>
                     {item.pending}
                   </span>
                 )}
+
                 <span style={{ color: '#AEAEB2', fontSize: 14, flexShrink: 0 }}>→</span>
               </button>
             ))}
@@ -202,21 +260,25 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Empty state */}
-      {d && d.recentActivity.length === 0 && (
+      {/* Empty state — when no clients yet */}
+      {d && d.recentActivity.length === 0 && totalInPipeline === 0 && (
         <div style={{ textAlign: 'center', padding: 40, background: '#fff', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📭</div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>暂无客户动态</p>
-          <p style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 16 }}>连接邮箱后，AI 会自动创建客户并分类消息</p>
-          <button
-            onClick={() => navigate('/connect')}
-            style={{
-              padding: '8px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-              border: 'none', background: '#007AFF', color: '#fff', cursor: 'pointer',
-            }}
-          >
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>还没有客户</p>
+          <p style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 16 }}>
+            连接邮箱后，新客户的第一封邮件会自动创建客户档案
+          </p>
+          <button onClick={() => navigate('/connect')} style={primaryBtnStyle}>
             连接邮箱 →
           </button>
+        </div>
+      )}
+
+      {/* Quick actions */}
+      {d && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <QuickBtn icon="➕" label="手动添加客户" onClick={() => navigate('/clients')} />
+          <QuickBtn icon="📬" label="连接邮箱" onClick={() => navigate('/connect')} />
         </div>
       )}
     </div>
@@ -225,28 +287,37 @@ export default function Dashboard() {
 
 /* ── Components ── */
 
-function StatCard({ value, label, color }: { value: string | number; label: string; color: string }) {
+function StatCard({ value, label, color, onClick }: {
+  value: string | number; label: string; color: string; onClick?: () => void;
+}) {
   return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '14px 10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-      <div style={{ fontSize: typeof value === 'number' ? 28 : 18, fontWeight: 800, letterSpacing: '-.3px', color, marginBottom: 2 }}>
+    <button
+      onClick={onClick}
+      style={{
+        background: '#fff', borderRadius: 14, padding: '14px 10px', textAlign: 'center',
+        border: 'none', cursor: onClick ? 'pointer' : 'default',
+        boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+      }}
+    >
+      <div style={{
+        fontSize: typeof value === 'number' ? 28 : 18, fontWeight: 800,
+        letterSpacing: '-.3px', color, marginBottom: 2,
+      }}>
         {value}
       </div>
       <div style={{ fontSize: 11, fontWeight: 600, color: '#1D1D1F' }}>{label}</div>
-    </div>
+    </button>
   );
 }
 
 function QuickBtn({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: 1, padding: '12px', borderRadius: 14, fontSize: 13, fontWeight: 600,
-        border: '.5px solid rgba(0,0,0,.06)', background: '#fff', cursor: 'pointer',
-        boxShadow: '0 1px 2px rgba(0,0,0,.03)', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', gap: 6,
-      }}
-    >
+    <button onClick={onClick} style={{
+      flex: 1, padding: '12px', borderRadius: 14, fontSize: 13, fontWeight: 600,
+      border: '.5px solid rgba(0,0,0,.06)', background: '#fff', cursor: 'pointer',
+      boxShadow: '0 1px 2px rgba(0,0,0,.03)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', gap: 6,
+    }}>
       <span>{icon}</span> {label}
     </button>
   );
@@ -271,3 +342,8 @@ function timeAgo(iso: string): string {
   if (sec < 86400) return `${Math.floor(sec / 3600)}小时前`;
   return `${Math.floor(sec / 86400)}天前`;
 }
+
+const primaryBtnStyle: React.CSSProperties = {
+  padding: '8px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+  border: 'none', background: '#007AFF', color: '#fff', cursor: 'pointer',
+};

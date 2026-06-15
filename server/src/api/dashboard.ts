@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
   await initDb();
   const userId = req.userId!;
 
-  const pendingClients  = queryOne("SELECT COUNT(DISTINCT client_id) as count FROM messages WHERE user_id = ? AND status = 'pending' AND client_id IS NOT NULL", [userId]) as any;
-  const newMessages     = queryOne("SELECT COUNT(*) as count FROM messages WHERE user_id = ? AND status = 'pending'", [userId]) as any;
+  const pendingClients  = queryOne("SELECT COUNT(DISTINCT client_id) as count FROM messages WHERE user_id = ? AND status = 'pending' AND category != 'spam' AND client_id IS NOT NULL", [userId]) as any;
+  const newMessages     = queryOne("SELECT COUNT(*) as count FROM messages WHERE user_id = ? AND status = 'pending' AND category != 'spam'", [userId]) as any;
   const urgentCount     = queryOne("SELECT COUNT(*) as count FROM messages WHERE user_id = ? AND category = 'urgent' AND status = 'pending'", [userId]) as any;
   const activeProjects  = queryOne("SELECT COUNT(*) as count FROM clients WHERE user_id = ? AND stage IN ('booked','shooting','production')", [userId]) as any;
 
@@ -18,14 +18,15 @@ router.get('/', async (req, res) => {
   const pipeline: Record<string, number> = { inquiry: 0, engaged: 0, booked: 0, shooting: 0, production: 0, delivered: 0 };
   for (const row of pipelineRows) { pipeline[row.stage] = row.count; }
 
-  // Recent client activity (last 8 clients with messages)
+  // Recent client activity (last 8 clients with non-spam messages)
   const recentActivity = queryAll(`
     SELECT c.id as client_id, c.name as client_name, c.stage,
-      (SELECT subject FROM messages m WHERE m.client_id = c.id ORDER BY m.created_at DESC LIMIT 1) as last_subject,
-      (SELECT MAX(created_at) FROM messages WHERE client_id = c.id) as last_message_at,
-      (SELECT COUNT(*) FROM messages WHERE client_id = c.id AND status = 'pending') as pending
+      (SELECT subject FROM messages m WHERE m.client_id = c.id AND m.category != 'spam' ORDER BY m.created_at DESC LIMIT 1) as last_subject,
+      (SELECT MAX(created_at) FROM messages WHERE client_id = c.id AND category != 'spam') as last_message_at,
+      (SELECT COUNT(*) FROM messages WHERE client_id = c.id AND status = 'pending' AND category != 'spam') as pending
     FROM clients c
-    WHERE c.user_id = ? AND c.status != 'archived' AND EXISTS (SELECT 1 FROM messages WHERE client_id = c.id)
+    WHERE c.user_id = ? AND c.status != 'archived'
+      AND EXISTS (SELECT 1 FROM messages WHERE client_id = c.id AND category != 'spam')
     ORDER BY last_message_at DESC
     LIMIT 8
   `, [userId]);

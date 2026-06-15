@@ -8,10 +8,68 @@ const URGENT_PATTERNS = [
   /wedding.*(tomorrow|today|soon)/i, /deadline/i,
 ];
 
+// Broad spam detection: newsletters, promos, receipts, automated, social, etc.
 const SPAM_PATTERNS = [
+  // Marketing / newsletters
+  /unsubscribe/i, /view in browser/i, /weekly digest/i, /newsletter/i,
+  /monthly roundup/i, /webinar/i, /free ebook/i, /whitepaper/i,
+  /limited time offer/i, /special offer/i, /discount code/i, /promo code/i,
+  /flash sale/i, /clearance/i, /save up to/i, /buy one get one/i,
+
+  // SEO / spam / cold outreach
   /seo/i, /backlink/i, /guest post/i, /sponsor/i, /buy.*followers/i,
   /click.*link/i, /win.*free/i, /congratulations.*winner/i,
-  /unsubscribe/i, /marketing.*solution/i, /lead.*generation/i,
+  /marketing.*solution/i, /lead.*generation/i, /cold.*email/i,
+
+  // Receipts / purchases / shipping
+  /order (confirm|#|number)/i, /shipping (confirm|update)/i,
+  /tracking (number|update)/i, /your.*receipt/i, /payment receipt/i,
+  /purchase confirm/i, /invoice.*from.*(amazon|apple|google)/i,
+  /your.*(order|purchase).*(confirmed|shipped|delivered)/i,
+  /package.*(delivered|on its way|shipped)/i,
+
+  // Social media notifications
+  /(facebook|instagram|twitter|linkedin|tiktok|snapchat|pinterest).*notif/i,
+  /new follower/i, /mentioned you/i, /tagged you/i,
+  /someone.*(liked|commented|followed|viewed)/i,
+  /notification from (facebook|instagram|linkedin|twitter)/i,
+
+  // System / automated emails
+  /password reset/i, /login attempt/i, /security alert/i,
+  /verify your (email|account)/i, /confirm your (email|account)/i,
+  /account.*verification/i, /two.factor/i, /2fa/i,
+  /your.*code is/i, /sign.in.*from/i, /new.*sign.in/i,
+
+  // Banking / finance
+  /account statement/i, /credit card.*statement/i,
+  /monthly statement/i, /balance.*alert/i, /payment due/i,
+  /bill.*due/i, /automatic payment/i,
+
+  // Calendar / scheduling platform emails (not direct client messages)
+  /reminder:.*(meeting|event|appointment)/i,
+  /you have.*(meeting|event).*(tomorrow|today|in.*hour)/i,
+
+  // Job / recruiting
+  /job (opening|opportunity|alert)/i, /career/i, /hiring/i,
+  /recruiter/i, /we.*like.*your.*(profile|resume|portfolio)/i,
+
+  // Survey / feedback
+  /(survey|feedback).*request/i, /tell us about your experience/i,
+  /rate your/i, /review your.*purchase/i,
+];
+
+// Business-related keywords — messages containing these are likely photography clients
+const BUSINESS_PATTERNS = [
+  /photograph/i, /shoot/i, /wedding/i, /portrait/i, /session/i,
+  /package/i, /price/i, /quote/i, /estimate/i, /available/i,
+  /book/i, /schedule/i, /date/i, /venue/i, /coverage/i,
+  /album/i, /print/i, /photo/i, /picture/i, /gallery/i,
+  /contract/i, /deposit/i, /retainer/i, /payment/i, /invoice/i,
+  /engagement/i, /bridal/i, /event/i, /party/i, /ceremony/i,
+  /how much do you charge/i, /are you available/i, /can you shoot/i,
+  /looking for a photographer/i, /need a photographer/i,
+  /do you (do|shoot|photograph|cover)/i, /interested in/i,
+  /checking in/i, /following up/i, /just wanted to/i,
 ];
 
 const STAGE_KEYWORDS: Record<string, string[]> = {
@@ -36,8 +94,22 @@ function detectStage(body: string, subject: string): string {
 
 function detectCategory(body: string, subject: string): 'urgent' | 'normal' | 'spam' {
   const text = subject + ' ' + body;
-  if (SPAM_PATTERNS.some(p => p.test(text))) return 'spam';
+
+  // Urgent check first
   if (URGENT_PATTERNS.some(p => p.test(text))) return 'urgent';
+
+  // Strong spam signal: matches spam patterns AND no business keywords
+  const spamMatches = SPAM_PATTERNS.filter(p => p.test(text)).length;
+  const bizMatches = BUSINESS_PATTERNS.filter(p => p.test(text)).length;
+
+  // Heavily weighted: if spam signals dominate and no business context, mark spam
+  if (spamMatches >= 3 && bizMatches === 0) return 'spam';
+  if (spamMatches >= 2 && bizMatches === 0 && text.length < 500) return 'spam';
+  // Single strong spam signal without business context → spam
+  if (spamMatches >= 1 && bizMatches === 0 && text.length < 200) return 'spam';
+  // Promotional/automated content that doesn't look like a real person emailing
+  if (spamMatches >= 2 && bizMatches <= 1) return 'spam';
+
   return 'normal';
 }
 

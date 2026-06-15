@@ -16,7 +16,7 @@ router.get('/inbox', async (req, res) => {
   const messages = queryAll(`
     SELECT m.*, c.name as client_name, c.stage as client_stage
     FROM messages m LEFT JOIN clients c ON m.client_id = c.id
-    WHERE m.user_id = ? AND m.status != 'archived'
+    WHERE m.user_id = ? AND m.status != 'archived' AND m.category != 'spam'
     ORDER BY CASE m.category WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
     m.created_at DESC LIMIT 50
   `, [userId]);
