@@ -48,6 +48,16 @@ const SPAM_PATTERNS = [
   /directory.*(?:listing|submission).*(?:photography|photographer)/i,
   /(?:finder'?s|finders).*fee.*photographer/i,
   /sponsor.*(?:post|content|article).*(?:photography|photo)/i,
+  // More photographer scams from global community research
+  /elopement.*(?:photo|shoot).*(?:just.*us|two|witness)/i, // Fake elopement inquiry
+  /surprise.*(?:wedding|proposal|engagement).*(?:photo|shoot|photographer)/i, // Fake surprise proposal
+  /corporate.*(?:headshot|portrait).*(?:\d+).*(?:employees|staff|team)/i, // Fake corporate shoot
+  /instagram.*(?:verify|verification|badge|blue.*check)/i, // IG verification phishing
+  /(?:feature|publish).*(?:magazine|vogue|times square|billboard)/i, // Fake magazine feature
+  /(?:print|album).*(?:sale|discount|clearance|blowout)/i, // Mass-market print sale spam
+  /(?:model|acting|talent).*(?:scout|agency|looking.*(?:face|look))/i, // Fake model scout
+  /(?:influencer|collab|exposure).*(?:free|trade|TF)/i, // "Exposure" payment offer
+  /(?:wedding|event).*(?:cancelled|canceled|cancel|postpone).*(?:refund|money back)/i, // Fake cancellation
 
   // ── Supplementary: Chinese spam ──
   /\(AD\)|（广告）|\[广告\]/,
@@ -304,8 +314,27 @@ function generateSmartReply(body: string, subject: string, stage: string, ctx?: 
         fashion: 'Fashion/editorial rates are project-based — happy to discuss details.',
         realestate: 'Real estate packages start at $200 per property.',
         boudoir: 'Boudoir sessions start at $500 including professional hair & makeup.',
+        aerial: 'Aerial/drone photography starts at $400 per session.',
+        elopement: 'Elopement packages start at $2,000 for 4 hours of coverage.',
       };
       reply += prices[shootType] || 'I\'d be happy to share my pricing with you. ';
+    }
+
+    // ── Seasonal awareness ──
+    const season = detectSeason();
+    const isPeak = isPeakWeddingSeason();
+    if (shootType === 'wedding' && isPeak) {
+      reply += `We're currently in peak wedding season (${season}), so dates are filling quickly. `;
+    } else if (shootType === 'wedding' && !isPeak) {
+      reply += `We're in the ${season} season — a beautiful time for weddings with more date flexibility. `;
+    } else if (shootType === 'portrait' || shootType === 'child') {
+      const seasonTips: Record<string, string> = {
+        spring: 'Spring flowers make a gorgeous backdrop right now! ',
+        summer: 'Summer golden hour light is stunning for outdoor sessions. ',
+        fall: 'Fall foliage creates the most amazing colors for photos. ',
+        winter: 'Winter sessions can be magical with cozy indoor settings. ',
+      };
+      reply += seasonTips[season] || '';
     }
 
     if (hasDate) {
@@ -416,10 +445,35 @@ function detectShootType(text: string): string | null {
   // Drone / Aerial
   if (/drone|aerial.*(?:photo|shoot|footage)|fly.*over.*(?:photo|shoot)/i.test(text)) return 'aerial';
 
+  // ── New genres from global community research ──
+  if (/elopement|micro.?wedding|minimony|tiny wedding|just.*us.*ceremony/i.test(text)) return 'wedding';
+  if (/proposal.*(?:photo|shoot|surprise)|surprise.*(?:proposal|engagement)/i.test(text)) return 'wedding';
+  if (/cake smash|milestone.*(?:photo|session)|sitter.*session/i.test(text)) return 'birthday';
+  if (/branding|brand.*(?:photo|shoot|session|content)|personal.*brand/i.test(text)) return 'commercial';
+  if (/lifestyle.*(?:newborn|family|session)|lifestyle.*(?:photo|shoot)/i.test(text)) return 'child';
+  if (/fine.art|artistic.*(?:portrait|photo)|creative.*(?:portrait|shoot)/i.test(text)) return 'portrait';
+  if (/film.*photograph|analog|35mm|medium.format|polaroid/i.test(text)) return 'portrait';
+  if (/destination.*(?:wedding|photo|shoot)|overseas.*(?:wedding|photo)/i.test(text)) return 'wedding';
+
   // Generic photography interest (last resort)
   if (/photograph|photo|shoot|session|camera|picture|portrait/i.test(text)) return 'portrait';
 
   return null;
+}
+
+// ── Seasonal awareness (for smarter replies) ──
+function detectSeason(): string {
+  const now = new Date();
+  const m = now.getMonth(); // 0=Jan, 11=Dec
+  if (m >= 2 && m <= 4) return 'spring';
+  if (m >= 5 && m <= 7) return 'summer';
+  if (m >= 8 && m <= 10) return 'fall';
+  return 'winter';
+}
+
+function isPeakWeddingSeason(): boolean {
+  const m = new Date().getMonth();
+  return m >= 4 && m <= 9; // May-October = peak wedding season (Northern Hemisphere)
 }
 
 // ── Entity extraction: key info from client messages ──
