@@ -109,6 +109,32 @@ router.post('/:id/send', async (req, res) => {
   }
 });
 
+// Retroactive spam cleanup — re-scan all messages and archive spam
+router.post('/cleanup-spam', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const messages = queryAll(
+    "SELECT id, from_address, subject, body, client_id, status FROM messages WHERE user_id = ? AND status != 'archived'",
+    [userId]
+  ) as any[];
+
+  let cleaned = 0;
+  for (const msg of messages) {
+    const fromEmail = (msg.from_address || '').match(/<([^>]+)>/)?.[1] || msg.from_address || '';
+    const isKnownClient = !!msg.client_id && !!queryOne('SELECT id FROM clients WHERE id = ?', [msg.client_id]);
+    const spamScore = calcIncomingSpamScore(msg.subject || '', msg.body || '', isKnownClient, fromEmail);
+    if (spamScore >= 3) {
+      run("UPDATE messages SET status = 'archived', ai_reply = '' WHERE id = ?", [msg.id]);
+      cleaned++;
+    }
+  }
+
+  // Also remove spam senders from clients table
+  run("DELETE FROM clients WHERE email IN (SELECT from_address FROM messages WHERE status = 'archived' AND user_id = ?) AND user_id = ? AND id NOT IN (SELECT DISTINCT client_id FROM messages WHERE status != 'archived' AND user_id = ?)", [userId, userId, userId]);
+
+  res.json({ ok: true, cleaned, total: messages.length });
+});
+
 // Shared spam scoring (mirrors email-watcher logic for the API endpoint)
 const PLATFORM_DOMAINS = [
   'linkedin.com', 'facebook.com', 'facebookmail.com', 'instagram.com', 'twitter.com',
@@ -119,6 +145,7 @@ const PLATFORM_DOMAINS = [
   'airbnb.com', 'booking.com', 'expedia.com', 'uber.com', 'lyft.com',
   'mailchimp', 'sendgrid', 'constantcontact', 'substack.com', 'medium.com',
   'indeed.com', 'monster.com', 'glassdoor.com', 'godaddy.com', 'wix.com',
+  'horoscopofree.com', 'newsletter.',
 ];
 const AUTO_SENDERS = /^(noreply|no-reply|donotreply|mailer-daemon|bounce|postmaster|notifications?|messages-noreply|jobs-listings|invitations|newsletter|marketing|promo|deals|offers|sales)@/i;
 

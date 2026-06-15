@@ -10,8 +10,12 @@ import { findOrCreateClient } from '../api/clients.js';
 let running = false;
 
 export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, userId?: string) {
-  if (running) return;
+  if (running) {
+    console.log('[EmailWatcher] Already running, skipping duplicate start');
+    return;
+  }
   running = true;
+  console.log(`[EmailWatcher] STARTED v2 with spam detection — ${new Date().toISOString()}`);
   const uid = userId || 'default';
   console.log(`[EmailWatcher] Polling ${cfg.email} every ${intervalMs / 1000}s (user: ${uid})`);
 
@@ -165,7 +169,7 @@ function detectServiceType(subject: string, body: string): string | null {
 // Strategy: domain reputation + email structure > content keywords
 
 // Known platform/notification domains — never photography clients
-const PLATFORM_DOMAINS = [
+export const PLATFORM_DOMAINS = [
   // Social / professional
   'linkedin.com', 'facebook.com', 'facebookmail.com', 'instagram.com',
   'twitter.com', 'tiktok.com', 'snapchat.com', 'pinterest.com',
@@ -187,6 +191,7 @@ const PLATFORM_DOMAINS = [
   'indeed.com', 'monster.com', 'glassdoor.com', 'ziprecruiter.com',
   // Domain & hosting
   'godaddy.com', 'namecheap.com', 'wix.com', 'squarespace.com',
+  'horoscopofree.com', 'newsletter.',
 ];
 
 // Email addresses that are always automated
