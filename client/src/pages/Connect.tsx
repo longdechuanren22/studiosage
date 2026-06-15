@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { useI18n } from '../i18n';
 
 interface ProviderInfo {
   key: string; name: string; helpUrl: string; setupGuide: string;
@@ -14,6 +15,18 @@ interface DetectResult {
 type Step = 'start' | 'oauth' | 'authcode' | 'password' | 'done';
 
 export default function Connect() {
+  const { lang } = useI18n();
+  const L = {
+    connectTitle: lang === 'zh' ? '连接你的工作邮箱' : 'Connect Your Work Email',
+    connectSub: lang === 'zh' ? 'AI 自动读取邮件、分类客户消息、起草回复' : 'AI reads emails, classifies clients, drafts replies',
+    emailLabel: lang === 'zh' ? '工作邮箱地址' : 'Work Email Address',
+    supported: lang === 'zh' ? '支持哪些邮箱？' : 'Supported Providers',
+    next: lang === 'zh' ? '下一步' : 'Next',
+    done: lang === 'zh' ? '已连接 · AI 正在监控收件箱' : 'Connected · AI monitoring inbox',
+    disconnect: lang === 'zh' ? '断开' : 'Disconnect',
+    dashboard: lang === 'zh' ? '返回面板' : 'Back to Dashboard',
+    otherTools: lang === 'zh' ? '其他集成' : 'Other Integrations',
+  };
   const [status, setStatus] = useState<Record<string, any>>({});
   const [step, setStep] = useState<Step>('start');
   const [email, setEmail] = useState('');
@@ -102,12 +115,12 @@ export default function Connect() {
       <div style={{ maxWidth: 420, margin: '0 auto', padding: '0 16px' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📬</div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.3px', margin: '0 0 4px' }}>连接你的工作邮箱</h2>
-          <p style={{ fontSize: 13, color: '#86868B', margin: 0 }}>AI 自动读取邮件、分类客户消息、起草回复</p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.3px', margin: '0 0 4px' }}>{L.connectTitle}</h2>
+          <p style={{ fontSize: 13, color: '#86868B', margin: 0 }}>{L.connectSub}</p>
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>工作邮箱地址</label>
+          <label style={labelStyle}>{L.emailLabel}</label>
           <input type="email" value={email}
             onChange={e => setEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && email.includes('@') && handleDetect()}
