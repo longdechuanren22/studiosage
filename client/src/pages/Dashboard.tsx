@@ -9,6 +9,7 @@ interface DashboardData {
   stats: { pendingClients: number; newMessages: number; urgentCount: number; activeProjects: number; revenueThisMonth: number; };
   pipeline: Record<string, number>;
   recentActivity: { client_id: string; client_name: string; stage: string; type: string; pending: number; needsAction: boolean; actionLabel: string; pending_proposals: number; unpaid_invoices: number; last_subject: string; last_message_at: string; last_msg_status: string; client_updated_at: string; }[];
+  insights: { type: string; value: string; raw_text: string; created_at: string; client_id: string; client_name: string; }[];
 }
 
 const pipelineStages = ['inquiry', 'engaged', 'booked', 'shooting', 'production', 'delivered'];
@@ -79,6 +80,40 @@ export default function Dashboard() {
               <span style={{ color: '#AEAEB2', fontSize: 14 }}>→</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* 🔔 Smart Insights — key info extracted from client messages */}
+      {d && d.insights && d.insights.length > 0 && (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1D1D1F', marginBottom: 10, letterSpacing: '-.1px' }}>
+            🔔 Key Details Extracted
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {d.insights.map((insight, i) => {
+              const iconMap: Record<string, string> = { date: '📅', budget: '💰', location: '📍', guest_count: '👥', hours: '⏱', requirement: '📋', change: '⚠️', question: '❓', urgency: '🚨' };
+              const labelMap: Record<string, string> = { date: 'Date', budget: 'Budget', location: 'Location', guest_count: 'Guests', hours: 'Coverage', requirement: 'Request', change: 'Change', question: 'Question', urgency: 'Urgent' };
+              return (
+              <button key={i} onClick={() => navigate(`/clients?open=${insight.client_id}`)} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                background: '#fff', borderRadius: 12, border: 'none', cursor: 'pointer',
+                textAlign: 'left' as const, boxShadow: '0 1px 2px rgba(0,0,0,.03)', width: '100%',
+              }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{iconMap[insight.type] || '💡'}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B' }}>{labelMap[insight.type] || insight.type}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-.1px' }}>{insight.value}</div>
+                </div>
+                {insight.client_name && (
+                  <span style={{ fontSize: 11, color: '#007AFF', background: 'rgba(0,122,255,.06)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {insight.client_name}
+                  </span>
+                )}
+                <span style={{ color: '#AEAEB2', fontSize: 12, flexShrink: 0 }}>→</span>
+              </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

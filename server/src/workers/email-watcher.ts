@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { fetchRecentMessages, type EmailConfig } from '../adapters/email.js';
 import { classifyMessage } from '../ai/engine.js';
+import { extractEntities } from '../ai/rules-engine.js';
 import { initDb } from '../db/schema.js';
 import { queryOne, queryAll, run } from '../db/query.js';
 import { findOrCreateClient } from '../api/clients.js';
@@ -103,6 +104,19 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
               run("UPDATE clients SET name = ?, updated_at = datetime('now') WHERE id = ? AND (name = ? OR name LIKE '%@%')",
                 [bestName, client.id, client.name]);
             }
+          }
+
+          // ── Extract key entities from message ──
+          const entities = extractEntities(msg.body || '', msg.subject || '');
+          for (const entity of entities) {
+            run(
+              `INSERT INTO client_insights (id, user_id, client_id, message_id, type, value, raw_text)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [randomUUID()!, uid, client?.id || null, msgId, entity.type, entity.value, entity.raw]
+            );
+          }
+          if (entities.length > 0) {
+            console.log(`[EmailWatcher] Extracted ${entities.length} entities: ${entities.map(e => e.type + '=' + e.value.slice(0, 30)).join(', ')}`);
           }
 
           // ── Auto-send AI reply via SMTP ──

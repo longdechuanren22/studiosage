@@ -422,6 +422,159 @@ function detectShootType(text: string): string | null {
   return null;
 }
 
+// ── Entity extraction: key info from client messages ──
+export interface ExtractedEntity {
+  type: 'date' | 'budget' | 'location' | 'guest_count' | 'hours' | 'requirement' | 'change' | 'question' | 'urgency';
+  value: string;
+  raw: string;  // original text that triggered this
+  confidence: number;
+}
+
+export function extractEntities(body: string, subject: string): ExtractedEntity[] {
+  const text = (subject + ' ' + body);
+  const entities: ExtractedEntity[] = [];
+
+  // ── Dates ──
+  const datePatterns = [
+    // English
+    /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*(?:20\d{2})?\b/gi,
+    /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,
+    /\b(?:next|this)\s+(?:week|month|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
+    // Chinese
+    /\d{4}年\d{1,2}月\d{1,2}[日号]/g,
+    /\d{1,2}月\d{1,2}[日号]/g,
+    /(?:下|这|本)(?:周|月|星期)/g,
+    /(?:明年|今年|明年)\s*\d{1,2}月/g,
+  ];
+  for (const p of datePatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'date', value: m[0], raw: m[0], confidence: 0.9 });
+    }
+  }
+
+  // ── Budget / Price ──
+  const budgetPatterns = [
+    /(?:budget|price|cost|rate|fee|pricing|quote|estimate).{0,30}?\$?\s?(\d[\d,.]*)\s*(?:k|千|万)?/gi,
+    /\$\s?(\d[\d,.]*)\s*(?:k|thousand)?\s*(?:budget|price|cost|range|minimum|starting)?/gi,
+    /(?:budget|price|cost|rate).{0,20}?(\d[\d,.]*)\s*[百千万]?/gi,
+    /(?:预算|价格|费用|报价|收费|多少钱).{0,20}?(\d[\d,.]*)\s*[百千万]?/g,
+  ];
+  for (const p of budgetPatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'budget', value: m[0].trim(), raw: m[0], confidence: 0.8 });
+    }
+  }
+
+  // ── Location / Venue ──
+  const locPatterns = [
+    /(?:venue|location|place|where|at)\s+(?:is|:)?\s*([A-Z][\w\s&.']+(?:Gardens|Hotel|Resort|Manor|Hall|Beach|Park|Church|Chapel|Estate|Vineyard|Barn|Mansion|Club|Restaurant|Studio|Farm))/gi,
+    /(?:地点|在哪|位置|酒店|场地|场所)[：:]\s*(.{2,30})/g,
+    /(?:venue|location)[：:]\s*(.{2,40})/gi,
+    /(?:at|in)\s+(?:the\s+)?([A-Z][\w\s]+(?:Gardens|Hotel|Resort|Manor|Hall|Beach|Park))\b/gi,
+  ];
+  for (const p of locPatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'location', value: (m[1] || m[0]).trim(), raw: m[0], confidence: 0.75 });
+    }
+  }
+
+  // ── Guest Count ──
+  const guestPatterns = [
+    /(\d{2,4})\s*(?:guests|people|persons|attendees|invited|coming)/gi,
+    /(?:guest|attendee|people|person)\s*(?:count|number|list).{0,20}?(\d{2,4})/gi,
+    /(\d{2,4})\s*(?:位|人|名).{0,10}?(?:嘉宾|客人|宾客|来宾)/g,
+  ];
+  for (const p of guestPatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      const num = parseInt((m[1] || m[0]).replace(/\D/g, ''));
+      if (num >= 2 && num <= 9999) {
+        entities.push({ type: 'guest_count', value: String(num), raw: m[0], confidence: 0.85 });
+      }
+    }
+  }
+
+  // ── Coverage Hours ──
+  const hoursPatterns = [
+    /(\d{1,2})\s*(?:hours?|hrs?|h)\s*(?:of\s*)?(?:coverage|shooting|photography)/gi,
+    /(?:coverage|shoot|photography).{0,20}?(\d{1,2})\s*(?:hours?|hrs?)/gi,
+    /(?:full|half)\s*day/gi,
+    /(\d{1,2})\s*(?:小时|个?钟头)/g,
+    /(?:全天|全天候|半天)/g,
+  ];
+  for (const p of hoursPatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'hours', value: m[0].trim(), raw: m[0], confidence: 0.8 });
+    }
+  }
+
+  // ── Requirements / Special Requests ──
+  const reqPatterns = [
+    /(?:need|want|looking for|require|must have|would like).{0,40}?(?:second (?:shooter|photographer)|album|print|drone|video|film|engagement|candid|formal|black.?white)/gi,
+    /(?:需要|想要|必须|一定).{0,20}?(?:双机|相册|打印|无人机|视频|底片|精修|修图|美颜)/g,
+    /(?:specific|special|custom|particular).{0,20}?(?:request|requirement|need|style)/gi,
+  ];
+  for (const p of reqPatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'requirement', value: m[0].trim(), raw: m[0], confidence: 0.7 });
+    }
+  }
+
+  // ── Change Detection ──
+  const changePatterns = [
+    /(?:changed|updated|moved|rescheduled|postponed|new).{0,30}?(?:date|time|venue|location|budget|plan)/gi,
+    /(?:改|换|调整|修改|更新|变动).{0,15}?(?:日期|时间|地点|预算|计划|方案)/g,
+    /(?:instead of|rather than|not).{0,30}?(?:date|venue|location)/gi,
+    /(?:sorry|unfortunately|regret).{0,40}?(?:can'?t|cannot|won'?t|unable|change|cancel)/gi,
+  ];
+  for (const p of changePatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'change', value: m[0].trim(), raw: m[0], confidence: 0.7 });
+    }
+  }
+
+  // ── Urgent signals ──
+  const urgentPatterns = [
+    /(?:as soon as possible|ASAP|urgent|emergency|immediately|right away| today | tomorrow )/gi,
+    /(?:尽快|马上|紧急|急|立刻|立即)/g,
+    /(?:deadline|due date).{0,20}?(?:\d|today|tomorrow|next)/gi,
+    /\b(?:today|tomorrow)\b.{0,20}?\?/gi,
+  ];
+  for (const p of urgentPatterns) {
+    let m;
+    while ((m = p.exec(text)) !== null) {
+      entities.push({ type: 'urgency', value: m[0].trim(), raw: m[0], confidence: 0.9 });
+    }
+  }
+
+  // ── Questions (client expects an answer) ──
+  if (/\?/.test(text)) {
+    const questionMatches = text.match(/[^.!?\n]+\?/g);
+    if (questionMatches) {
+      for (const q of questionMatches.slice(0, 3)) {
+        if (q.trim().length > 10) {
+          entities.push({ type: 'question', value: q.trim(), raw: q, confidence: 0.95 });
+        }
+      }
+    }
+  }
+
+  // Deduplicate by value
+  const seen = new Set<string>();
+  return entities.filter(e => {
+    const key = `${e.type}:${e.value.slice(0, 50)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function generateInvoiceOffline(params: GenerateInvoiceParams) {
   const items = PACKAGE_DEFAULTS[params.packageType] || PACKAGE_DEFAULTS.portrait;
   const subtotal = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);

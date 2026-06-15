@@ -56,6 +56,17 @@ router.get('/', async (req, res) => {
     AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
   `, [userId]) as any;
 
+  // Recent insights (extracted key info from client messages — last 10)
+  const recentInsights = queryAll(`
+    SELECT ci.type, ci.value, ci.raw_text, ci.created_at,
+           c.id as client_id, c.name as client_name
+    FROM client_insights ci
+    LEFT JOIN clients c ON ci.client_id = c.id
+    WHERE ci.user_id = ?
+    ORDER BY ci.created_at DESC
+    LIMIT 10
+  `, [userId]);
+
   res.json({
     stats: {
       pendingClients: pendingClients?.count || 0,
@@ -66,6 +77,7 @@ router.get('/', async (req, res) => {
     },
     pipeline,
     recentActivity: enriched,
+    insights: recentInsights,
   });
 });
 

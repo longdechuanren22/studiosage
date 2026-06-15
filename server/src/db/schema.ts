@@ -217,6 +217,20 @@ function runMigrations(db: SqlJsDatabase) {
   addCol('messages', 'imap_uid', 'TEXT');
   addCol('users', 'password_hash', 'TEXT');
 
+  // Client insights table — extracted key info from conversations
+  db.run(`
+    CREATE TABLE IF NOT EXISTS client_insights (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
+      client_id TEXT REFERENCES clients(id),
+      message_id TEXT REFERENCES messages(id),
+      type TEXT NOT NULL,
+      value TEXT NOT NULL,
+      raw_text TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // Add UNIQUE constraint on tool_connections (safe: ALTER TABLE ADD CONSTRAINT fails silently if exists)
   try { db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch (_) { }
   // Fast dedup lookup for email watcher
