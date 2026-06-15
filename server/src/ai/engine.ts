@@ -44,13 +44,18 @@ async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promise<stri
 export async function classifyMessage(body: string, subject: string, ctx?: ClientContext): Promise<ClassifyResult> {
   if (!USE_AI) return classifyOffline(body, subject, ctx);
 
-  const stageInfo = ctx
-    ? `Client: ${ctx.name || 'Unknown'}, Stage: ${ctx.stage || '?'}, Gallery: ${ctx.galleryUploaded || 0}/${ctx.galleryTotal || 0}`
-    : 'No context';
-  const prompt = `Classify this photography client message. Context: ${stageInfo}\nSubject: "${subject}"\nMessage: "${body}"\nOutput JSON: {"category":"urgent|normal|spam","summary":"...","suggestedReply":"...","confidence":0.X,"stage":"inquiry|...|post_delivery"}`;
+  try {
+    const stageInfo = ctx
+      ? `Client: ${ctx.name || 'Unknown'}, Stage: ${ctx.stage || '?'}, Gallery: ${ctx.galleryUploaded || 0}/${ctx.galleryTotal || 0}`
+      : 'No context';
+    const prompt = `Classify this photography client message. Context: ${stageInfo}\nSubject: "${subject}"\nMessage: "${body}"\nOutput JSON: {"category":"urgent|normal|spam","summary":"...","suggestedReply":"...","confidence":0.X,"stage":"inquiry|...|post_delivery"}`;
 
-  const text = await callAI(prompt, 600, 0.3);
-  return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
+    const text = await callAI(prompt, 600, 0.3);
+    return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
+  } catch (err) {
+    console.error('[AI] classifyMessage failed, using offline fallback:', (err as Error).message);
+    return classifyOffline(body, subject, ctx);
+  }
 }
 
 export interface GenerateInvoiceParams {
@@ -63,8 +68,13 @@ export interface GenerateInvoiceParams {
 
 export async function generateInvoiceData(params: GenerateInvoiceParams) {
   if (!USE_AI) return generateInvoiceOffline(params);
-  const prompt = `Generate photography invoice JSON. Input: ${JSON.stringify(params)}. Include line items, retainer label, 3-phase schedule if applicable.`;
-  const text = await callAI(prompt, 500, 0.2);
-  return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
+  try {
+    const prompt = `Generate photography invoice JSON. Input: ${JSON.stringify(params)}. Include line items, retainer label, 3-phase schedule if applicable.`;
+    const text = await callAI(prompt, 500, 0.2);
+    return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
+  } catch (err) {
+    console.error('[AI] generateInvoiceData failed, using offline fallback:', (err as Error).message);
+    return generateInvoiceOffline(params);
+  }
 }
 
