@@ -16,10 +16,12 @@ export default function Proposals() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
-  const fetchProposals = () => {
-    api.get('/api/proposals')
-      .then(r => r.json()).then(d => setProposals(Array.isArray(d) ? d : [])).catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchProposals = async () => {
+    try {
+      const d = await api.get<any[]>('/api/proposals');
+      setProposals(Array.isArray(d) ? d : []);
+    } catch { /* network error — proposals remain empty */ }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchProposals(); }, [token]);
@@ -44,7 +46,7 @@ export default function Proposals() {
         }}>+ 新建</button>
       </div>
 
-      {showForm && <ProposalForm token={token} toast={toast} onDone={() => { setShowForm(false); fetchProposals(); }} />}
+      {showForm && <ProposalForm toast={toast} onDone={() => { setShowForm(false); fetchProposals(); }} />}
 
       {loading && <div style={{ padding: 40, textAlign: 'center', color: '#AEAEB2' }}>加载中…</div>}
 
@@ -86,7 +88,7 @@ export default function Proposals() {
   );
 }
 
-function ProposalForm({ onDone, token, toast }: { onDone: () => void; token: string | null; toast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
+function ProposalForm({ onDone, toast }: { onDone: () => void; toast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
   const [form, setForm] = useState({ title: '', clientId: '', packages: '[]', pricing: '{}', contractTerms: '' });
   const [submitting, setSubmitting] = useState(false);
 

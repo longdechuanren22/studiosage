@@ -25,7 +25,7 @@ import { deployRoutes } from './api/deploy.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { emailConnectRoutes } from './api/email-connect.js';
-import { proposalRoutes, proposalPublicRoutes } from './api/proposals.js';
+import { proposalRoutes } from './api/proposals.js';
 import { portalRoutes } from './api/portal.js';
 import { calendarRoutes } from './api/calendar.js';
 import { logger } from './utils/logger.js';
@@ -51,8 +51,7 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/oauth', oauthRoutes);
 app.use('/api/deploy', deployRoutes);
 app.use('/api/demo', demoRoutes);
-app.use('/api/proposals', proposalPublicRoutes);  // shared/:token — public
-app.use('/api/portal', portalRoutes);              // client portal — token-based
+app.use('/api/portal', portalRoutes);              // client portal — token-based (提案查看/接受/消息/发票)
 
 // ── Protected routes (JWT required) ──
 app.use('/api/messages', authenticate, messageRoutes);

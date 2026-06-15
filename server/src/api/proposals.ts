@@ -4,7 +4,6 @@ import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
 
 const router: RouterType = Router();
-const publicRouter: RouterType = Router();
 
 // List proposals for current user
 router.get('/', async (req, res) => {
@@ -84,51 +83,4 @@ router.post('/:id/share', async (req, res) => {
   res.json({ shareToken, shareUrl: `/portal/proposal/${shareToken}` });
 });
 
-// ── Public routes (no JWT) — mounted separately ──
-
-// View shared proposal (client-facing, no auth)
-publicRouter.get('/shared/:token', async (req, res) => {
-  await initDb();
-  const proposal = queryOne(
-    `SELECT p.*, c.name as client_name, c.email as client_email
-     FROM proposals p LEFT JOIN clients c ON p.client_id = c.id
-     WHERE p.share_token = ?`,
-    [req.params.token]
-  );
-  if (!proposal) return res.status(404).json({ error: '提案不存在或链接已失效' });
-
-  const p = proposal as any;
-  run('UPDATE proposals SET status = CASE WHEN status = ? THEN ? ELSE status END WHERE share_token = ?',
-    ['sent', 'viewed', req.params.token]);
-
-  res.json({
-    id: p.id,
-    title: p.title,
-    clientName: p.client_name,
-    clientEmail: p.client_email,
-    packages: typeof p.packages === 'string' ? JSON.parse(p.packages) : p.packages,
-    pricing: typeof p.pricing === 'string' ? JSON.parse(p.pricing) : p.pricing,
-    contractTerms: p.contract_terms,
-    status: p.status,
-  });
-});
-
-// Client accepts proposal
-publicRouter.post('/shared/:token/accept', async (req, res) => {
-  await initDb();
-  const proposal = queryOne('SELECT * FROM proposals WHERE share_token = ?', [req.params.token]);
-  if (!proposal) return res.status(404).json({ error: '提案不存在' });
-
-  run('UPDATE proposals SET status = ?, updated_at = datetime(\'now\') WHERE share_token = ?',
-    ['accepted', req.params.token]);
-
-  // Update client stage to 'booked'
-  const p = proposal as any;
-  if (p.client_id) {
-    run("UPDATE clients SET stage = 'booked', updated_at = datetime('now') WHERE id = ?", [p.client_id]);
-  }
-
-  res.json({ ok: true, message: '提案已接受！' });
-});
-
-export { router as proposalRoutes, publicRouter as proposalPublicRoutes };
+export { router as proposalRoutes };
