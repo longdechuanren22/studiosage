@@ -48,11 +48,11 @@ router.post('/incoming', async (req, res) => {
 
   const classification = await classifyMessage(body, subject || '', clientContext);
 
-  // Spam check: apply the same conservative scoring as the email watcher
+  // Spam check: platform domain or automated sender → always spam
   const fromEmail = (from || '').match(/<([^>]+)>/)?.[1] || from || '';
-  const isKnownClient = !!clientId && !!queryOne('SELECT id FROM clients WHERE id = ?', [clientId]);
-  const spamScore = calcIncomingSpamScore(subject || '', body || '', isKnownClient, fromEmail);
-  const isSpam = classification.category === 'spam' || spamScore >= 3;
+  const isSpam = classification.category === 'spam'
+    || (!!fromEmail && PLATFORM_DOMAINS.some(d => fromEmail.toLowerCase().includes(d)))
+    || AUTO_SENDERS.test(fromEmail);
 
   run(`INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -60,7 +60,7 @@ router.post('/incoming', async (req, res) => {
      classification.category, isSpam ? 'archived' : 'pending',
      isSpam ? '' : classification.suggestedReply, new Date().toISOString()]);
 
-  res.json({ id, ...classification, isSpam, spamScore });
+  res.json({ id, ...classification, isSpam });
 });
 
 // Update AI reply (user edits the draft)
@@ -121,9 +121,9 @@ router.post('/cleanup-spam', async (req, res) => {
   let cleaned = 0;
   for (const msg of messages) {
     const fromEmail = (msg.from_address || '').match(/<([^>]+)>/)?.[1] || msg.from_address || '';
-    const isKnownClient = !!msg.client_id && !!queryOne('SELECT id FROM clients WHERE id = ?', [msg.client_id]);
-    const spamScore = calcIncomingSpamScore(msg.subject || '', msg.body || '', isKnownClient, fromEmail);
-    if (spamScore >= 3) {
+    const isSpam = PLATFORM_DOMAINS.some(d => fromEmail.toLowerCase().includes(d))
+      || AUTO_SENDERS.test(fromEmail);
+    if (isSpam) {
       run("UPDATE messages SET status = 'archived', ai_reply = '' WHERE id = ?", [msg.id]);
       cleaned++;
     }
@@ -135,7 +135,7 @@ router.post('/cleanup-spam', async (req, res) => {
   res.json({ ok: true, cleaned, total: messages.length });
 });
 
-// Shared spam scoring (mirrors email-watcher logic for the API endpoint)
+// Shared spam lists (mirrors email-watcher.ts)
 const PLATFORM_DOMAINS = [
   'linkedin.com', 'facebook.com', 'facebookmail.com', 'instagram.com', 'twitter.com',
   'tiktok.com', 'snapchat.com', 'pinterest.com', 'amazon.com', 'aliexpress.com',
@@ -148,19 +148,5 @@ const PLATFORM_DOMAINS = [
   'horoscopofree.com', 'newsletter.',
 ];
 const AUTO_SENDERS = /^(noreply|no-reply|donotreply|mailer-daemon|bounce|postmaster|notifications?|messages-noreply|jobs-listings|invitations|newsletter|marketing|promo|deals|offers|sales)@/i;
-
-function calcIncomingSpamScore(subject: string, body: string, isKnownClient: boolean, fromEmail: string): number {
-  const text = (subject + ' ' + body.slice(0, 1000)).toLowerCase();
-  let score = 0;
-  if (fromEmail && PLATFORM_DOMAINS.some(d => fromEmail.toLowerCase().includes(d))) score += 2;
-  if (fromEmail && AUTO_SENDERS.test(fromEmail)) score += 1;
-  if (body && /^\s*(<html|<head|<body|<div|<meta)/i.test(body.trim())) score += 1;
-  if (/(unsubscribe|opt.out|email preferences|view (in|online) browser)/i.test(text)) score += 1;
-  if (/(sale|discount|promo|clearance|flash|limited|exclusive|deal|offer|shop|buy).*(off|code|ends|save|up to)/i.test(subject)) score += 1;
-  if (isKnownClient) score -= 2;
-  if (/\?/.test(text)) score -= 1;
-  if (/^(hi|hey|hello|dear)\b/im.test(text)) score -= 1;
-  return Math.max(0, score);
-}
 
 export { router as messageRoutes };

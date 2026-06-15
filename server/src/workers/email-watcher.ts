@@ -53,13 +53,15 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
           fromEmail: fromEmail || undefined,
         } as any);
 
-        // Spam detection: only mark as spam if MULTIPLE strong signals
-        // Principle: false negatives (spam in inbox) > false positives (real client hidden)
-        const spamScore = calcSpamScore(msg.subject || '', msg.body || '', isKnownSender, fromEmail || '');
-        const isSpam = classification.category === 'spam' || spamScore >= 3;
+        // Simple, reliable spam detection:
+        // 1. Platform domain (LinkedIn, Steam, Tencent...) → always spam
+        // 2. Automated sender address (noreply, notifications...) → always spam
+        // 3. AI classified as spam → spam
+        const isPlatformSpam = !!fromEmail && isPlatformDomain(fromEmail);
+        const isAutoSender = !!fromEmail && isAutomatedSender(fromEmail);
+        const isSpam = classification.category === 'spam' || isPlatformSpam || isAutoSender;
 
-        // Debug: log every decision
-        console.log(`[EmailWatcher] ${isSpam ? 'SPAM' : 'OK'} score=${spamScore} known=${isKnownSender} | ${msg.subject?.slice(0, 50)} | ${(fromEmail || '').slice(0, 40)}`);
+        console.log(`[EmailWatcher] ${isSpam ? 'SPAM' : 'OK  '} platform=${isPlatformSpam} auto=${isAutoSender} | ${msg.subject?.slice(0, 45)} | ${(fromEmail || '').slice(0, 35)}`);
 
         // Determine best name: body signature > email header > email username
         const bestName = bodyName || fromName;
@@ -211,61 +213,3 @@ function isAutomatedSender(email: string): boolean {
   return AUTOMATED_SENDERS.some(p => p.test(email));
 }
 
-// Returns 0-5, threshold >= 3 = spam
-function calcSpamScore(subject: string, body: string, isKnownSender: boolean, fromEmail: string): number {
-  const text = (subject + ' ' + body.slice(0, 1000)).toLowerCase();
-  let score = 0;
-
-  // ── Language-agnostic signals ──
-
-  // Platform domain (LinkedIn, Facebook, Amazon, Netflix...) → +2
-  if (fromEmail && isPlatformDomain(fromEmail)) score += 2;
-
-  // Automated sender address (noreply, notifications, marketing...) → +1
-  if (fromEmail && isAutomatedSender(fromEmail)) score += 1;
-
-  // HTML-only email (no plain text body, only HTML tags) → +1
-  if (body && /^\s*(<html|<head|<body|<div|<table|<meta|<script|<![ \t\n]*$)/i.test(body.trim())) score += 1;
-
-  // Tracking pixels / beacons → +1
-  if (/<img[^>]+(tracking|pixel|beacon|1x1|0x0)[^>]*>/i.test(body)) score += 1;
-  if (/opencount|openrate|clickthrough|utm_/i.test(body)) score += 1;
-
-  // Unsubscribe / email preference links → +1
-  if (/unsubscribe|opt.out|email preferences|update.*(subscription|preferences)/i.test(text)) score += 1;
-
-  // Bulk mail headers / view-in-browser → +1
-  if (/view (in|online|as webpage|in browser)/i.test(text)) score += 1;
-
-  // ── Generic spam content patterns (language-agnostic) ──
-  const spamContent = [
-    /\b(SEO|backlink|guest post|sponsor)\b/i,
-    /(buy|purchase).*(followers|likes|traffic|views)/i,
-    /earn.*(money|cash|income).*(home|online)/i,
-    /casino|gambling|poker|betting|lottery/i,
-    /pharmacy|viagra|cialis|weight.loss/i,
-    /loan.*(approv|low.rate)|credit.*repair|debt.*(relief|consolidat)/i,
-    /nigerian|prince|inheritance|western.union/i,
-  ];
-  for (const p of spamContent) { if (p.test(text)) score += 1; }
-
-  // ── Bonus: subject looks promotional ──
-  if (/(sale|discount|promo|clearance|flash|limited|exclusive|deal|offer|save|shop|buy|order|shipping|delivery|tracking|receipt|purchase)/i.test(subject)) score += 1;
-
-  // ── Mitigations ──
-
-  // Known photography client → -2 (strong signal it's real)
-  if (isKnownSender) score -= 2;
-
-  // Email looks like a real person wrote it → -1
-  const humanSignals = [
-    /\?/,                                                   // Question
-    /^(hi|hey|hello|dear|good morning|good afternoon)\b/im, // Greeting
-    /(thanks|thank you|appreciate|best|regards|cheers)/i,    // Polite closing
-    /^(my name is|I am|I'm|we are|we're)\b/im,              // Self-introduction
-    /(looking for|interested in|do you|could you|would you|can you|wondering)/i, // Inquiry
-  ];
-  if (humanSignals.some(p => p.test(text))) score -= 1;
-
-  return Math.max(0, score);
-}
