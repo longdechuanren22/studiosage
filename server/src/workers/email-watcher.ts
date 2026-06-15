@@ -82,26 +82,38 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
           }
         }
 
+        const msgId = randomUUID()!;
+        const replyText = isSpam ? '' : classification.suggestedReply;
+
         run(
           `INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, channel, imap_uid, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [randomUUID()!, uid, client?.id || null, msg.from || '', msg.subject || '', msg.body || '',
+          [msgId, uid, client?.id || null, msg.from || '', msg.subject || '', msg.body || '',
            classification.category, isSpam ? 'archived' : 'pending',
-           isSpam ? '' : classification.suggestedReply, 'email', msg.id, msg.date.toISOString()]
+           replyText, 'email', msg.id, msg.date.toISOString()]
         );
 
         if (isSpam) { spamCount++; }
         else {
           newCount++;
           if (client) {
-            // Update client stage from inquiry → engaged on first real message
             run("UPDATE clients SET stage = ?, updated_at = datetime('now') WHERE id = ? AND stage = 'inquiry'",
               ['engaged', client.id]);
-
-            // Update client name if we found a better one from email body
             if (bestName && bestName !== client.name && bestName.includes(' ')) {
               run("UPDATE clients SET name = ?, updated_at = datetime('now') WHERE id = ? AND (name = ? OR name LIKE '%@%')",
                 [bestName, client.id, client.name]);
+            }
+          }
+
+          // ── Auto-send AI reply via SMTP ──
+          if (replyText) {
+            try {
+              const { sendReply } = await import('../adapters/email.js');
+              await sendReply(cfg, msg.from || '', msg.subject || '', replyText);
+              run("UPDATE messages SET status = 'replied' WHERE id = ?", [msgId]);
+              console.log(`[EmailWatcher] Auto-replied: ${(msg.from || '').slice(0, 40)}`);
+            } catch (err) {
+              console.error(`[EmailWatcher] Auto-send failed (draft saved): ${(err as Error).message}`);
             }
           }
         }
