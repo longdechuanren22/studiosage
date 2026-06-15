@@ -2,22 +2,20 @@ import { useState, useEffect } from 'react';
 import { useDemo } from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { t } from '../i18n';
+import { getLang, setLang } from '../i18n';
 
 interface SetupStatus {
-  ai: { configured: boolean };
-  pixieset: { configured: boolean };
-  google: { configured: boolean };
-  stripe: { configured: boolean };
-  email: { connected: boolean; email?: string };
-  setupComplete: boolean;
+  ai: { configured: boolean }; pixieset: { configured: boolean };
+  google: { configured: boolean }; stripe: { configured: boolean };
+  email: { connected: boolean; email?: string }; setupComplete: boolean;
 }
 
 export default function Settings() {
   const { demo, toggleDemo } = useDemo();
   const navigate = useNavigate();
   const [status, setStatus] = useState<SetupStatus | null>(null);
-  const [toggles, setToggles] = useState({ autoReply: true, menuBadge: true, desktopNotif: true, sound: false });
+  const [lang, setLangState] = useState(getLang());
+  const [toggles, setToggles] = useState({ autoReply: true, desktopNotif: true, sound: false });
 
   useEffect(() => {
     if (demo) {
@@ -27,168 +25,165 @@ export default function Settings() {
     api.get('/api/settings').then(setStatus).catch(() => setStatus(null));
   }, [demo]);
 
+  const handleLangSwitch = (l: 'en' | 'zh') => {
+    setLang(l);
+    setLangState(l);
+    window.location.reload();
+  };
+
+  const toggleStyle = (on: boolean) => ({
+    width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+    background: on ? '#34C759' : 'rgba(0,0,0,.15)', position: 'relative' as const,
+    transition: 'background .2s', flexShrink: 0,
+  });
+
+  const dotStyle = (on: boolean) => ({
+    position: 'absolute' as const, top: 2, width: 18, height: 18, borderRadius: '50%',
+    background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+    left: on ? 20 : 2, transition: 'left .2s',
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 480 }}>
+    <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.5px', margin: 0 }}>设置</h2>
-        <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>配置你的 StudioSage 偏好。</p>
-      </div>
-
-      {/* 🔔 Email connection banner — always visible when not connected */}
-      {!status?.email?.connected && (
-        <div
-          onClick={() => navigate('/connect')}
-          style={{
-            background: 'linear-gradient(135deg, rgba(0,122,255,.08), rgba(88,86,214,.06))',
-            borderRadius: 16, padding: '16px 18px',
-            border: '.5px solid rgba(0,122,255,.15)',
-            cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 12,
-          }}
-        >
-          <div style={{ fontSize: 32 }}>📬</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-.1px', marginBottom: 2 }}>连接你的工作邮箱</div>
-            <div style={{ fontSize: 12, color: '#86868B' }}>AI 自动读取邮件、分类客户、起草回复</div>
-          </div>
-          <div style={{ fontSize: 18, color: '#007AFF' }}>→</div>
-        </div>
-      )}
-
-      {/* Email connected card */}
-      {status?.email?.connected && (
-        <div style={{
-          background: 'rgba(52,199,89,.04)', borderRadius: 16, padding: '14px 16px',
-          border: '.5px solid rgba(52,199,89,.12)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20 }}>✅</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-.1px' }}>
-                {status.email.email || '邮箱'} 已连接
-              </div>
-              <div style={{ fontSize: 11, color: '#86868B' }}>AI 正在每 60 秒轮询收件箱</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Demo mode toggle */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: 14, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.1px' }}>演示模式</div>
-            <div style={{ fontSize: 11, color: '#86868B' }}>使用示例数据预览 StudioSage 功能</div>
-          </div>
-          <div className={`toggle-track ${demo ? 'on' : ''}`} onClick={toggleDemo} />
-        </div>
+        <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.5px', margin: 0 }}>Settings</h2>
+        <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>Configure your StudioSage workspace.</p>
       </div>
 
       {/* Plan */}
-      <div style={{ background: 'linear-gradient(135deg, rgba(0,122,255,.04), rgba(88,86,214,.04))', borderRadius: 16, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,.04)', border: '.5px solid rgba(0,122,255,.1)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <Section title="Plan">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-.1px' }}>Pro 助手</div>
-            <div style={{ fontSize: 12, color: '#86868B' }}>14 天免费试用 · 无需信用卡</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Pro Assistant</div>
+            <div style={{ fontSize: 13, color: '#86868B' }}>14-day free trial · No credit card required</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#007AFF', letterSpacing: '-.5px' }}>$10<span style={{ fontSize: 13, fontWeight: 500, color: '#86868B' }}>/月</span></div>
-            <div style={{ fontSize: 10, color: '#86868B' }}>年付 $96 · $8/月</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#007AFF' }}>$10<span style={{ fontSize: 14, fontWeight: 500, color: '#86868B' }}>/mo</span></div>
+            <div style={{ fontSize: 11, color: '#86868B' }}>$96/yr · $8/mo</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11, color: '#86868B' }}>
-          <span>✓ AI 自动分类+回复</span>
-          <span>✓ 摄影专用发票</span>
-          <span>✓ 客户管线</span>
-          <span>✓ 无限消息</span>
+        <div style={{ marginTop: 12, display: 'flex', gap: 16, fontSize: 12, color: '#86868B', flexWrap: 'wrap' }}>
+          <span>✓ AI Auto-Reply</span><span>✓ Photo Invoices</span><span>✓ Client Pipeline</span><span>✓ Unlimited Messages</span>
         </div>
-        <button style={{
-          width: '100%', marginTop: 10, padding: '10px', borderRadius: 14, fontSize: 13, fontWeight: 700,
-          background: '#007AFF', color: '#fff', border: 'none', cursor: 'pointer', letterSpacing: '-.1px',
-        }} onClick={() => alert('试用模式已激活。连接 Stripe 后升级正式版。')}>
-          开始 14 天免费试用
+        <button style={{ marginTop: 12, padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: 'none', background: '#007AFF', color: '#fff', cursor: 'pointer' }}>
+          Start 14-Day Free Trial
         </button>
-      </div>
+      </Section>
 
-      {/* AI Auto-Reply */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-        <div style={{ padding: '8px 14px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '.8px' }}>AI 自动回复</div>
+      {/* Language */}
+      <Section title="Language">
+        <div style={{ display: 'flex', gap: 10 }}>
+          {(['en', 'zh'] as const).map(l => (
+            <button key={l} onClick={() => handleLangSwitch(l)} style={{
+              padding: '8px 20px', borderRadius: 10, border: '1px solid',
+              borderColor: lang === l ? '#007AFF' : 'rgba(0,0,0,.1)',
+              background: lang === l ? '#007AFF' : '#fff',
+              color: lang === l ? '#fff' : '#1D1D1F',
+              fontSize: 13, fontWeight: lang === l ? 600 : 400, cursor: 'pointer',
+            }}>
+              {l === 'en' ? '🇺🇸 English' : '🇨🇳 中文'}
+            </button>
+          ))}
         </div>
-        <SettingToggle label="启用自动回复" hint="自动回复常见客户咨询" on={toggles.autoReply} onClick={() => setToggles({ ...toggles, autoReply: !toggles.autoReply })} />
-      </div>
+      </Section>
 
-      {/* Notifications */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-        <div style={{ padding: '8px 14px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '.8px' }}>通知</div>
+      {/* Connections */}
+      <Section title="Connections">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <ConnRow icon="📧" label="Work Email" status={status?.email} detail={status?.email?.connected ? status.email.email : undefined} onClick={() => navigate('/connect')} />
+          <ConnRow icon="🤖" label="AI Engine (DeepSeek)" status={status?.ai} last={false} />
+          <ConnRow icon="💳" label="Stripe Payments" status={status?.stripe} last={false} />
+          <ConnRow icon="🖼" label="Pixieset Gallery" status={status?.pixieset} last={false} />
+          <ConnRow icon="📅" label="Google Calendar" status={status?.google} last={true} />
         </div>
-        <SettingToggle label="菜单栏角标" hint="在菜单栏显示未读数量" on={toggles.menuBadge} onClick={() => setToggles({ ...toggles, menuBadge: !toggles.menuBadge })} />
-        <SettingToggle label="桌面通知" hint="紧急消息时推送提醒" on={toggles.desktopNotif} onClick={() => setToggles({ ...toggles, desktopNotif: !toggles.desktopNotif })} />
-        <SettingToggle label="提示音" hint="新消息时播放提示音" on={toggles.sound} onClick={() => setToggles({ ...toggles, sound: !toggles.sound })} last />
-      </div>
+      </Section>
 
-      {/* Connections — now clickable */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-        <div style={{ padding: '8px 14px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '.8px' }}>连接工具</div>
+      {/* Preferences */}
+      <Section title="Preferences">
+        <ToggleRow label="Auto-Reply" hint="AI drafts replies to common inquiries" on={toggles.autoReply} onChange={() => setToggles(p => ({ ...p, autoReply: !p.autoReply }))} />
+        <ToggleRow label="Desktop Notifications" hint="Push alerts for urgent messages" on={toggles.desktopNotif} onChange={() => setToggles(p => ({ ...p, desktopNotif: !p.desktopNotif }))} />
+        <ToggleRow label="Sound" hint="Play a sound on new messages" on={toggles.sound} onChange={() => setToggles(p => ({ ...p, sound: !p.sound }))} last />
+      </Section>
+
+      {/* Demo Mode */}
+      <Section title="Developer">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Demo Mode</div>
+            <div style={{ fontSize: 12, color: '#86868B' }}>Preview StudioSage with sample data</div>
+          </div>
+          <button onClick={toggleDemo} style={toggleStyle(demo)}>
+            <div style={dotStyle(demo)} />
+          </button>
         </div>
-        <ConnRow
-          label="📧 工作邮箱"
-          connected={status?.email?.connected}
-          detail={status?.email?.connected ? status.email.email : '未连接'}
-          onClick={() => navigate('/connect')}
-        />
-        <ConnRow label="🤖 AI 引擎 (DeepSeek)" connected={status?.ai?.configured} detail={status?.ai?.configured ? '已连接' : '未连接'} />
-        <ConnRow label="💰 Stripe 支付" connected={status?.stripe?.configured} detail={status?.stripe?.configured ? '已连接' : '未连接'} />
-        <ConnRow label="🖼️ Pixieset 相册" connected={status?.pixieset?.configured} detail={status?.pixieset?.configured ? '已连接' : '未连接'} />
-        <ConnRow label="📅 Google Calendar" connected={status?.google?.configured} detail={status?.google?.configured ? '已连接' : '未连接'} last />
-      </div>
+      </Section>
 
-      {/* Setup hint */}
       {!status?.setupComplete && (
-        <div style={{ background: 'rgba(255,149,0,.06)', borderRadius: 14, padding: 14, border: '.5px solid rgba(255,149,0,.12)' }}>
-          <p style={{ fontSize: 12, color: '#FF9500', fontWeight: 600, margin: 0 }}>⚡ 演示模式已启用</p>
-          <p style={{ fontSize: 12, color: '#86868B', margin: '4px 0 0' }}>数据为示例内容。连接真实工具后自动切换为生产模式。</p>
+        <div style={{ padding: 14, borderRadius: 12, background: 'rgba(255,149,0,.06)', border: '1px solid rgba(255,149,0,.12)', fontSize: 13, color: '#FF9500' }}>
+          ⚡ Demo mode active — data is sample content. Connect real tools to switch to production.
         </div>
       )}
     </div>
   );
 }
 
-function SettingToggle({ label, hint, on, onClick, last }: { label: string; hint: string; on: boolean; onClick: () => void; last?: boolean }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: last ? 'none' : '.5px solid rgba(0,0,0,.04)' }} onClick={onClick}>
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.1px' }}>{label}</div>
-        <div style={{ fontSize: 11, color: '#86868B' }}>{hint}</div>
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#86868B', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 12 }}>{title}</div>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+        {children}
       </div>
-      <div className={`toggle-track ${on ? 'on' : ''}`} />
     </div>
   );
 }
 
-function ConnRow({ label, connected, detail, last, onClick }: { label: string; connected?: boolean; detail?: string; last?: boolean; onClick?: () => void }) {
+function ConnRow({ icon, label, status, detail, last, onClick }: { icon: string; label: string; status?: { configured?: boolean; connected?: boolean }; detail?: string; last?: boolean; onClick?: () => void }) {
+  const isConnected = status?.configured || status?.connected;
   return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '10px 14px',
-        borderBottom: last ? 'none' : '.5px solid rgba(0,0,0,.04)',
-        cursor: onClick ? 'pointer' : 'default',
-        transition: 'background .15s',
-      }}
-      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLElement).style.background = 'rgba(0,122,255,.04)'; }}
-      onMouseLeave={e => { if (onClick) (e.currentTarget as HTMLElement).style.background = ''; }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-.1px' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: connected ? '#34C759' : '#AEAEB2' }}>
-          {connected ? '●' : '○'} {detail || (connected ? '已连接' : '未连接')}
-        </span>
-        {onClick && !connected && <span style={{ fontSize: 14, color: '#007AFF' }}>→</span>}
+    <div onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+      borderBottom: last ? 'none' : '1px solid rgba(0,0,0,.04)',
+      cursor: onClick ? 'pointer' : 'default',
+    }}>
+      <span style={{ fontSize: 20 }}>{icon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+        {detail && <div style={{ fontSize: 11, color: '#86868B' }}>{detail}</div>}
       </div>
+      <span style={{
+        fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8,
+        background: isConnected ? 'rgba(52,199,89,.08)' : 'rgba(142,142,147,.08)',
+        color: isConnected ? '#34C759' : '#8E8E93',
+      }}>
+        {isConnected ? '● Connected' : '○ Not connected'}
+      </span>
+      {onClick && <span style={{ color: '#AEAEB2', fontSize: 14 }}>→</span>}
+    </div>
+  );
+}
+
+function ToggleRow({ label, hint, on, onChange, last }: { label: string; hint: string; on: boolean; onChange: () => void; last?: boolean }) {
+  return (
+    <div onClick={onChange} style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '12px 16px', borderBottom: last ? 'none' : '1px solid rgba(0,0,0,.04)',
+      cursor: 'pointer',
+    }}>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 12, color: '#86868B' }}>{hint}</div>
+      </div>
+      <button style={{
+        width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+        background: on ? '#34C759' : 'rgba(0,0,0,.15)', position: 'relative', transition: 'background .2s', flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%',
+          background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+          left: on ? 20 : 2, transition: 'left .2s',
+        }} />
+      </button>
     </div>
   );
 }

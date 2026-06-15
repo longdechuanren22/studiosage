@@ -2,6 +2,7 @@ import { Router, type Router as RouterType } from 'express';
 import { randomUUID } from 'node:crypto';
 import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
+import { callAI } from '../ai/engine.js';
 
 const router: RouterType = Router();
 
@@ -81,6 +82,110 @@ router.post('/:id/share', async (req, res) => {
   run('UPDATE proposals SET share_token = ?, status = ?, updated_at = datetime(\'now\') WHERE id = ?',
     [shareToken, 'sent', req.params.id]);
   res.json({ shareToken, shareUrl: `/portal/proposal/${shareToken}` });
+});
+
+// AI-generate proposal from client chat history
+router.post('/generate-from-chat', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const { clientId } = req.body;
+
+  if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+
+  // Get client info
+  const client = queryOne('SELECT * FROM clients WHERE id = ? AND user_id = ?', [clientId, userId]) as any;
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  // Get client's messages
+  const messages = queryAll(
+    'SELECT from_address, subject, body, created_at FROM messages WHERE client_id = ? AND user_id = ? AND category != ? ORDER BY created_at ASC LIMIT 20',
+    [clientId, userId, 'spam']
+  ) as any[];
+
+  if (messages.length === 0) {
+    return res.status(400).json({ error: 'No messages found for this client. Chat with them first.' });
+  }
+
+  // Build conversation summary
+  const chatSummary = messages.map(m =>
+    `[${m.created_at}] ${m.from_address}: ${m.subject}\n${(m.body || '').slice(0, 500)}`
+  ).join('\n---\n');
+
+  const clientInfo = {
+    name: client.name,
+    email: client.email,
+    type: client.type || 'unknown',
+    stage: client.stage,
+  };
+
+  try {
+    // Try AI generation
+    const prompt = `You are a photographer's assistant. Based on the chat history below with a client, generate a professional photography proposal.
+
+Client info: ${JSON.stringify(clientInfo)}
+
+Chat history:
+${chatSummary.slice(0, 3000)}
+
+Output valid JSON only (no markdown):
+{
+  "title": "Proposal title (e.g., 'Sarah & Mike Wedding Photography')",
+  "packages": [{"name": "Package name", "price": 4500, "includes": ["item 1", "item 2"]}],
+  "pricing": {"Service A": 2500, "Service B": 1000},
+  "contractTerms": "1. 50% retainer confirms the date, non-refundable.\\n2. 25% due on shoot day.\\n3. 25% due before delivery."
+}`;
+
+    const aiText = await callAI(prompt, 800, 0.4);
+    const cleaned = aiText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const generated = JSON.parse(cleaned);
+
+    // Create the proposal in DB
+    const id = randomUUID();
+    const shareToken = randomUUID().replace(/-/g, '');
+    run(
+      `INSERT INTO proposals (id, user_id, client_id, title, packages, pricing, contract_terms, share_token, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+      [id, userId, clientId, generated.title || `${client.name} Proposal`,
+       JSON.stringify(generated.packages || []), JSON.stringify(generated.pricing || {}),
+       generated.contractTerms || '', shareToken]
+    );
+
+    return res.status(201).json({
+      id, shareToken,
+      title: generated.title,
+      packages: generated.packages,
+      pricing: generated.pricing,
+      contractTerms: generated.contractTerms,
+      generated: true,
+    });
+  } catch (err) {
+    console.error('[AI Proposal] Failed, using template:', (err as Error).message);
+
+    // Fallback: template-based proposal from chat context
+    const chatText = messages.map(m => m.subject + ' ' + (m.body || '').slice(0, 200)).join(' ');
+    const pkgType = client.type || 'wedding';
+    const pkgPrice = pkgType === 'wedding' ? 3500 : pkgType === 'portrait' ? 450 : pkgType === 'event' ? 1800 : 2000;
+    const title = `${client.name} ${pkgType.charAt(0).toUpperCase() + pkgType.slice(1)} Photography`;
+
+    const id = randomUUID();
+    const shareToken = randomUUID().replace(/-/g, '');
+    run(
+      `INSERT INTO proposals (id, user_id, client_id, title, packages, pricing, contract_terms, share_token, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+      [id, userId, clientId, title,
+       JSON.stringify([{ name: `${pkgType.charAt(0).toUpperCase() + pkgType.slice(1)} Package`, price: pkgPrice, includes: ['Full coverage', 'Edited images', 'Online gallery'] }]),
+       JSON.stringify({ [pkgType]: pkgPrice }),
+       '1. 50% retainer non-refundable.\n2. 25% on shoot day.\n3. 25% before delivery.',
+       shareToken]
+    );
+
+    return res.status(201).json({
+      id, shareToken, title, generated: false,
+      packages: [{ name: `${pkgType} Package`, price: pkgPrice }],
+      pricing: { [pkgType]: pkgPrice },
+      contractTerms: '1. 50% retainer non-refundable.\n2. 25% on shoot day.\n3. 25% before delivery.',
+    });
+  }
 });
 
 export { router as proposalRoutes };

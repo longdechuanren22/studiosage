@@ -65,6 +65,25 @@ export default function Proposals() {
     } catch { toast(t('proposals.sendFail'), 'error'); }
   };
 
+  const handleGenerateFromChat = async () => {
+    if (clients.length === 0) { toast('No clients with chat history. Connect email first.', 'error'); return; }
+    // Pick the most recently active client
+    const recentClient = clients[0];
+    try {
+      const result = await api.post<{ id: string; shareToken: string; generated: boolean }>('/api/proposals/generate-from-chat', {
+        clientId: recentClient.id,
+      });
+      toast(result.generated ? 'AI proposal generated from chat history!' : 'Proposal created from template.', 'success');
+      if (result.shareToken) {
+        const url = `${window.location.origin}/sage/portal/proposal/${result.shareToken}`;
+        navigator.clipboard?.writeText(url).then(() => toast(t('proposals.linkCopied'), 'info'));
+      }
+      fetchAll();
+    } catch (err: any) {
+      toast(err.message || 'Failed to generate proposal', 'error');
+    }
+  };
+
   const acceptedCount = proposals.filter(p => p.status === 'accepted').length;
 
   return (
@@ -78,7 +97,14 @@ export default function Proposals() {
               : t('proposals.subtitleEmpty')}
           </p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} style={{ padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: '#007AFF', color: '#fff', letterSpacing: '-.1px' }}>{t('proposals.new')}</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {clients.length > 0 && (
+            <button onClick={handleGenerateFromChat} style={{ padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: '1px solid rgba(0,0,0,.1)', cursor: 'pointer', background: '#fff', color: '#007AFF', letterSpacing: '-.1px' }}>
+              🤖 AI Generate
+            </button>
+          )}
+          <button onClick={() => setShowForm(!showForm)} style={{ padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: '#007AFF', color: '#fff', letterSpacing: '-.1px' }}>{t('proposals.new')}</button>
+        </div>
       </div>
 
       {proposals.length === 0 && !showForm && (

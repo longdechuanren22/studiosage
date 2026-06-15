@@ -9,6 +9,7 @@ interface Client {
   message_count: number; pending_count: number;
   invoice_count: number; unpaid_invoice_count: number;
   last_message_at: string; last_message_subject: string;
+  shoot_date: string; package_type: string;
 }
 
 interface Message {

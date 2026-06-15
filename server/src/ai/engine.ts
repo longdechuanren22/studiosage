@@ -20,7 +20,7 @@ interface ClassifyResult {
   stage?: string;
 }
 
-async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promise<string> {
+export async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promise<string> {
   if (process.env.DEEPSEEK_API_KEY) {
     const res = await fetch(AI_URL, {
       method: 'POST',
