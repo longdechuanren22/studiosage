@@ -98,7 +98,7 @@ router.post('/connect', async (req, res) => {
 
     try {
       const { startEmailWatcher } = await import('../workers/email-watcher.js');
-      startEmailWatcher(cfg, 60000, userId).catch(err => console.error('EmailWatcher failed:', err));
+      startEmailWatcher(cfg, 15000, userId).catch(err => console.error('EmailWatcher failed:', err));
     } catch (_) {}
 
     return res.json({ ok: true, message: '邮箱已连接! AI 正在监控你的收件箱。' });
