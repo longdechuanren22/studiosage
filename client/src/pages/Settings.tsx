@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDemo } from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { getLang, setLang } from '../i18n';
+import { useI18n } from '../i18n';
 
 interface SetupStatus {
   ai: { configured: boolean }; pixieset: { configured: boolean };
@@ -14,7 +14,7 @@ export default function Settings() {
   const { demo, toggleDemo } = useDemo();
   const navigate = useNavigate();
   const [status, setStatus] = useState<SetupStatus | null>(null);
-  const [lang, setLangState] = useState(getLang());
+  const { lang, setLang } = useI18n();
   const [toggles, setToggles] = useState({ autoReply: true, desktopNotif: true, sound: false });
 
   useEffect(() => {
@@ -25,11 +25,7 @@ export default function Settings() {
     api.get('/api/settings').then(setStatus).catch(() => setStatus(null));
   }, [demo]);
 
-  const handleLangSwitch = (l: 'en' | 'zh') => {
-    setLang(l);
-    setLangState(l);
-    window.location.reload();
-  };
+  const handleLangSwitch = (l: 'en' | 'zh') => setLang(l);
 
   const toggleStyle = (on: boolean) => ({
     width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',

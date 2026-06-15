@@ -1,8 +1,7 @@
 import { ReactNode, createContext, useContext, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
-import { t, getLang, setLang } from '../i18n';
-import type { Lang } from '../i18n';
+import { t, useI18n } from '../i18n';
 
 export const DemoContext = createContext<{ demo: boolean; toggleDemo: () => void }>({ demo: true, toggleDemo: () => {} });
 export const useDemo = () => useContext(DemoContext);
@@ -23,6 +22,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang, setLang } = useI18n();
   const avatarChar = user?.name?.[0] || 'E';
 
   const handleLogout = () => {
@@ -30,10 +30,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     navigate('/login', { replace: true });
   };
 
-  const toggleLang = () => {
-    setLang(getLang() === 'en' ? 'zh' : 'en');
-    window.location.reload();
-  };
+  const toggleLang = () => setLang(lang === 'en' ? 'zh' : 'en');
 
   return (
     <DemoContext.Provider value={{ demo, toggleDemo: () => setDemo(!demo) }}>
@@ -54,7 +51,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 background: 'none', border: 'none', fontSize: 12, cursor: 'pointer',
                 color: '#86868B', padding: '2px 6px', borderRadius: 4,
               }} title="Switch language">
-                {getLang() === 'en' ? '中文' : 'EN'}
+                {lang === 'en' ? '中文' : 'EN'}
               </button>
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setMenuOpen(!menuOpen)} style={{
@@ -79,7 +76,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                         ⚙ {t('nav.settings')}
                       </button>
                       <button onClick={() => { setMenuOpen(false); toggleLang(); }} style={menuItemStyle}>
-                        🌐 {getLang() === 'en' ? '切换到中文' : 'Switch to English'}
+                        🌐 {lang === 'en' ? 'Switch to 中文' : 'Switch to English'}
                       </button>
                       <button onClick={() => { setMenuOpen(false); handleLogout(); }} style={{ ...menuItemStyle, color: '#FF3B30' }}>
                         ↩ {t('auth.logout')}

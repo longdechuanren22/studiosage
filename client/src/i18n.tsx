@@ -1,7 +1,33 @@
 // Simple i18n — single source of truth for all UI text
 // Default: English. Toggle: localStorage 'studiosage_lang' = 'zh'
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 
 export type Lang = 'en' | 'zh';
+
+// ── Reactive language context (no page reload needed) ──
+interface LangCtx { lang: Lang; setLang: (l: Lang) => void; t: (key: string) => string; tf: (key: string, r: Record<string, string | number>) => string; }
+const LangContext = createContext<LangCtx>({ lang: 'en', setLang: () => {}, t: (k: string) => k, tf: (k: string) => k });
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>(() => (localStorage.getItem('studiosage_lang') as Lang) || 'en');
+  const setLang = useCallback((l: Lang) => { localStorage.setItem('studiosage_lang', l); setLangState(l); }, []);
+  const translate = useCallback((key: string): string => {
+    const keys = key.split('.'); let val: any = translations[lang];
+    for (const k of keys) { val = val?.[k]; if (val === undefined) break; }
+    if (typeof val === 'string') return val;
+    val = translations.en;
+    for (const k of keys) { val = val?.[k]; if (val === undefined) return key; }
+    return typeof val === 'string' ? val : key;
+  }, [lang]);
+  const tf = useCallback((key: string, reps: Record<string, string | number>): string => {
+    let text = translate(key);
+    for (const [k, v] of Object.entries(reps)) { text = text.replace(`{${k}}`, String(v)); }
+    return text;
+  }, [translate]);
+  return <LangContext.Provider value={{ lang, setLang, t: translate, tf }}>{children}</LangContext.Provider>;
+}
+
+export function useI18n() { return useContext(LangContext); }
 
 const en = {
   // App
