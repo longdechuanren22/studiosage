@@ -446,7 +446,7 @@ function detectShootType(text: string): string | null {
   if (/drone|aerial.*(?:photo|shoot|footage)|fly.*over.*(?:photo|shoot)/i.test(text)) return 'aerial';
 
   // ── New genres from global community research ──
-  if (/elopement|micro.?wedding|minimony|tiny wedding|just.*us.*ceremony/i.test(text)) return 'wedding';
+  if (/elopement|micro.?wedding|minimony|tiny wedding|just.*us.*ceremony|tipi.*wedding|festival.*wedding/i.test(text)) return 'wedding';
   if (/proposal.*(?:photo|shoot|surprise)|surprise.*(?:proposal|engagement)/i.test(text)) return 'wedding';
   if (/cake smash|milestone.*(?:photo|session)|sitter.*session/i.test(text)) return 'birthday';
   if (/branding|brand.*(?:photo|shoot|session|content)|personal.*brand/i.test(text)) return 'commercial';
@@ -454,6 +454,12 @@ function detectShootType(text: string): string | null {
   if (/fine.art|artistic.*(?:portrait|photo)|creative.*(?:portrait|shoot)/i.test(text)) return 'portrait';
   if (/film.*photograph|analog|35mm|medium.format|polaroid/i.test(text)) return 'portrait';
   if (/destination.*(?:wedding|photo|shoot)|overseas.*(?:wedding|photo)/i.test(text)) return 'wedding';
+  // ── Niche genres from global research ──
+  if (/boudoir|intimate.*portrait|empowerment.*(?:session|photo)/i.test(text)) return 'boudoir';
+  if (/twilight.*(?:shoot|photo)|virtual.*(?:tour|staging)|floor.?plan|property.*(?:photo|shoot|listing)|real.estate|airbnb|HDR.*real/i.test(text)) return 'realestate';
+  if (/restaurant.*(?:menu|photo|shoot)|food.*(?:stylist|menu|photo|shoot)|culinary|dish.*(?:photo|shoot)/i.test(text)) return 'food';
+  if (/environmental.*portrait|boardroom|executive.*(?:portrait|headshot)|corporate.*(?:team|group).*(?:photo|portrait|headshot)|B2B.*photo/i.test(text)) return 'headshot';
+  if (/action.*(?:shot|photo).*(?:pet|dog|cat)|(?:pet|dog|cat).*(?:action|running|playing|outdoor).*(?:photo|shoot|session)|senior.*(?:pet|dog|cat)/i.test(text)) return 'pet';
 
   // Generic photography interest (last resort)
   if (/photograph|photo|shoot|session|camera|picture|portrait/i.test(text)) return 'portrait';
