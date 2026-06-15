@@ -18,20 +18,38 @@ router.get('/', async (req, res) => {
   const pipeline: Record<string, number> = { inquiry: 0, engaged: 0, booked: 0, shooting: 0, production: 0, delivered: 0 };
   for (const row of pipelineRows) { pipeline[row.stage] = row.count; }
 
-  // Recent client activity (last 8 clients with non-spam messages)
+  // Smart recent activity: clients active in last 30 days, with context
   const recentActivity = queryAll(`
-    SELECT c.id as client_id, c.name as client_name, c.stage,
-      (SELECT subject FROM messages m WHERE m.client_id = c.id AND m.category != 'spam' ORDER BY m.created_at DESC LIMIT 1) as last_subject,
+    SELECT
+      c.id as client_id, c.name as client_name, c.stage, c.type,
+      c.updated_at as client_updated_at,
+      (SELECT COUNT(*) FROM messages WHERE client_id = c.id AND status = 'pending' AND category != 'spam') as pending,
+      (SELECT COUNT(*) FROM proposals WHERE client_id = c.id AND status = 'sent') as pending_proposals,
+      (SELECT COUNT(*) FROM invoices WHERE client_id = c.id AND status = 'sent') as unpaid_invoices,
+      (SELECT subject FROM messages WHERE client_id = c.id AND category != 'spam' ORDER BY created_at DESC LIMIT 1) as last_subject,
       (SELECT MAX(created_at) FROM messages WHERE client_id = c.id AND category != 'spam') as last_message_at,
-      (SELECT COUNT(*) FROM messages WHERE client_id = c.id AND status = 'pending' AND category != 'spam') as pending
+      (SELECT status FROM messages WHERE client_id = c.id AND category != 'spam' ORDER BY created_at DESC LIMIT 1) as last_msg_status
     FROM clients c
     WHERE c.user_id = ? AND c.status != 'archived'
+      AND c.updated_at >= datetime('now', '-30 days')
       AND EXISTS (SELECT 1 FROM messages WHERE client_id = c.id AND category != 'spam')
-    ORDER BY last_message_at DESC
+    ORDER BY
+      CASE WHEN pending > 0 THEN 0 ELSE 1 END,
+      last_message_at DESC
     LIMIT 8
   `, [userId]);
 
-  // Revenue this month (from paid invoices)
+  // Map activity to clear action hints
+  const enriched = (recentActivity as any[]).map((item: any) => ({
+    ...item,
+    needsAction: item.pending > 0,
+    actionLabel: item.pending > 0 ? 'needs_reply'
+      : item.pending_proposals > 0 ? 'proposal_pending'
+      : item.unpaid_invoices > 0 ? 'payment_due'
+      : 'recently_active',
+  }));
+
+  // Revenue this month
   const revenueRow = queryOne(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM invoices WHERE user_id = ? AND status = 'paid'
@@ -47,7 +65,7 @@ router.get('/', async (req, res) => {
       revenueThisMonth: revenueRow?.total || 0,
     },
     pipeline,
-    recentActivity,
+    recentActivity: enriched,
   });
 });
 

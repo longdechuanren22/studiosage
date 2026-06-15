@@ -92,9 +92,13 @@ router.post('/:id/send', async (req, res) => {
   try {
     await sendReply({ ...cfg, password }, msgData.from_address, subject, replyText);
     run('UPDATE messages SET status = ?, ai_reply = ? WHERE id = ? AND user_id = ?', ['replied', replyText, id, userId]);
+    // Update client timestamp so dashboard reflects recent activity
+    if (msgData.client_id) {
+      run("UPDATE clients SET updated_at = datetime('now') WHERE id = ?", [msgData.client_id]);
+    }
     res.json({ status: 'sent' });
   } catch (err: any) {
-    res.status(500).json({ error: `发送失败: ${err.message}` });
+    res.status(500).json({ error: `Send failed: ${err.message}` });
   }
 });
 

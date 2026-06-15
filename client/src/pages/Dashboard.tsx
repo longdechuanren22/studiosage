@@ -8,7 +8,7 @@ import { t, tf } from '../i18n';
 interface DashboardData {
   stats: { pendingClients: number; newMessages: number; urgentCount: number; activeProjects: number; revenueThisMonth: number; };
   pipeline: Record<string, number>;
-  recentActivity: { client_id: string; client_name: string; stage: string; last_subject: string; last_message_at: string; pending: number; }[];
+  recentActivity: { client_id: string; client_name: string; stage: string; type: string; pending: number; needsAction: boolean; actionLabel: string; pending_proposals: number; unpaid_invoices: number; last_subject: string; last_message_at: string; last_msg_status: string; client_updated_at: string; }[];
 }
 
 const pipelineStages = ['inquiry', 'engaged', 'booked', 'shooting', 'production', 'delivered'];
@@ -23,7 +23,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, 30000);
+    const t = setInterval(fetchData, 15000);
     return () => clearInterval(t);
   }, []);
 
@@ -118,7 +118,13 @@ export default function Dashboard() {
             🕐 {t('dash.recentActivity')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {d.recentActivity.map((item, i) => (
+            {d.recentActivity.map((item, i) => {
+              const isPending = item.pending > 0;
+              const isReplied = item.last_msg_status === 'replied';
+              const actionColor = isPending ? '#FF9500' : isReplied ? '#34C759' : '#007AFF';
+              const actionIcon = isPending ? '📨' : isReplied ? '✅' : '💬';
+              const actionText = isPending ? `${item.pending} pending` : isReplied ? 'Replied' : 'Active';
+              return (
               <button key={item.client_id} onClick={() => navigate(`/clients?open=${item.client_id}`)} style={clientRowStyle}>
                 <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: `hsl(${i * 50 + 200}, 50%, 55%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 700 }}>
                   {item.client_name?.[0]?.toUpperCase() || '?'}
@@ -126,19 +132,19 @@ export default function Dashboard() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-.1px', marginBottom: 2 }}>
                     {item.client_name}
-                    <span style={{ fontSize: 10, fontWeight: 500, marginLeft: 8, padding: '2px 6px', borderRadius: 6, background: item.stage === 'delivered' ? 'rgba(52,199,89,.08)' : 'rgba(0,122,255,.06)', color: item.stage === 'delivered' ? '#34C759' : '#007AFF' }}>
-                      {t(`dash.stage.${item.stage}`)}
-                    </span>
+                    {item.type && <span style={{ fontSize: 10, fontWeight: 500, marginLeft: 6, padding: '2px 6px', borderRadius: 6, background: 'rgba(175,82,222,.08)', color: '#AF52DE' }}>{item.type}</span>}
+                    <span style={{ fontSize: 10, fontWeight: 500, marginLeft: 6, padding: '2px 6px', borderRadius: 6, background: actionColor + '14', color: actionColor }}>{actionIcon} {actionText}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#86868B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.pending > 0 ? '📨 ' : ''}{item.last_subject || '(no subject)'}
+                    {item.last_subject || '(no subject)'}
                     <span style={{ color: '#AEAEB2', marginLeft: 8 }}>{timeAgo(item.last_message_at)}</span>
                   </div>
                 </div>
-                {item.pending > 0 && <span style={{ background: '#FF3B30', color: '#fff', fontSize: 11, fontWeight: 700, minWidth: 20, height: 20, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '0 6px' }}>{item.pending}</span>}
+                {item.unpaid_invoices > 0 && <span style={{ background: '#FF3B30', color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>${item.unpaid_invoices} unpaid</span>}
                 <span style={{ color: '#AEAEB2', fontSize: 14, flexShrink: 0 }}>→</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
