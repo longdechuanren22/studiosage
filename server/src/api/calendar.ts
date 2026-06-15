@@ -18,43 +18,37 @@ router.get('/events', async (_req, res) => {
     const events = await cal.getUpcomingEvents(30);
     res.json(events);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || '获取日历失败' });
+    res.status(500).json({ ok: false, error: err.message || 'Failed to fetch calendar' });
   }
 });
 
-// Check availability for a date/time slot
 router.post('/check', async (req, res) => {
   try {
     const { date, hourStart, hourEnd } = req.body;
-    if (!date) return res.status(400).json({ error: '请选择日期' });
-
+    if (!date) return res.status(400).json({ ok: false, error: 'Date is required' });
     const cal = getAdapter();
     const available = await cal.checkAvailability(date, hourStart || 9, hourEnd || 17);
-    res.json({ date, available });
+    res.json({ ok: true, date, available });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// Create an appointment (stores locally + on Google Calendar)
 router.post('/appointments', async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const { clientId, title, date, timeStart, timeEnd, notes } = req.body;
-  if (!title || !date) return res.status(400).json({ error: '标题和日期不能为空' });
-
+  if (!title || !date) return res.status(400).json({ ok: false, error: 'Title and date are required' });
   try {
     const cal = getAdapter();
     const result = await cal.createAppointment({
-      summary: title,
-      description: notes || '',
+      summary: title, description: notes || '',
       start: { dateTime: `${date}T${timeStart || '09:00'}:00`, timeZone: 'Asia/Shanghai' },
       end: { dateTime: `${date}T${timeEnd || '10:00'}:00`, timeZone: 'Asia/Shanghai' },
     } as any);
     res.json({ ok: true, appointment: result });
   } catch (err: any) {
-    // Still store locally even if Google sync fails
-    res.status(500).json({ error: err.message || '创建预约失败' });
+    res.status(500).json({ ok: false, error: err.message || 'Failed to create appointment' });
   }
 });
 

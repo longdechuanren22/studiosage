@@ -36,7 +36,7 @@ router.get('/:id', async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const client = queryOne('SELECT * FROM clients WHERE id = ? AND user_id = ?', [req.params.id, userId]);
-  if (!client) return res.status(404).json({ error: '客户不存在' });
+  if (!client) return res.status(404).json({ ok: false, error: 'Client not found' });
 
   const messages = queryAll(
     'SELECT * FROM messages WHERE client_id = ? ORDER BY created_at DESC LIMIT 50',
@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const { name, email, phone, wechat_id, type, notes } = req.body;
-  if (!name) return res.status(400).json({ error: '客户姓名不能为空' });
+  if (!name) return res.status(400).json({ ok: false, error: 'Client name is required' });
 
   const id = uuidv4();
   run(
@@ -72,7 +72,7 @@ router.patch('/:id', async (req, res) => {
   const userId = req.userId!;
   const { name, email, phone, wechat_id, type, notes, stage } = req.body;
   const existing = queryOne('SELECT * FROM clients WHERE id = ? AND user_id = ?', [req.params.id, userId]);
-  if (!existing) return res.status(404).json({ error: '客户不存在' });
+  if (!existing) return res.status(404).json({ ok: false, error: 'Client not found' });
 
   run(
     `UPDATE clients SET name=?, email=?, phone=?, wechat_id=?, type=?, notes=?, stage=?, updated_at=datetime('now') WHERE id=? AND user_id=?`,

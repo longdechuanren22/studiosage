@@ -33,7 +33,7 @@ router.get('/config', async (req, res) => {
 router.post('/detect', (req, res) => {
   const { email } = req.body;
   if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: '请输入有效的邮箱地址' });
+    return res.status(400).json({ ok: false, error: 'Invalid email address' });
   }
   const { config, info } = detectProvider(email);
   res.json({ provider: info, imapHost: config.imapHost, imapPort: config.imapPort, smtpHost: config.smtpHost, smtpPort: config.smtpPort });
@@ -43,7 +43,7 @@ router.post('/detect', (req, res) => {
 router.post('/test', async (req, res) => {
   const { email, password, imapHost, imapPort, imapTls, smtpHost, smtpPort, smtpTls } = req.body;
   if (!email || !password) {
-    return res.status(400).json({ error: '邮箱和密码/授权码不能为空' });
+    return res.status(400).json({ ok: false, error: 'Email and password are required' });
   }
 
   const { config } = detectProvider(email);
@@ -71,7 +71,7 @@ router.post('/connect', async (req, res) => {
   const userId = req.userId!;
   const { email, password, imapHost, imapPort, imapTls, smtpHost, smtpPort, smtpTls } = req.body;
   if (!email || !password) {
-    return res.status(400).json({ error: '邮箱和密码不能为空' });
+    return res.status(400).json({ ok: false, error: 'Email and password are required' });
   }
 
   const { config } = detectProvider(email);

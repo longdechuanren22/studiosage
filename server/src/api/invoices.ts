@@ -36,7 +36,7 @@ router.post('/generate', async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const { clientName, clientEmail, packageType, amount, currency, paymentSchedule, notes } = req.body;
-  if (!clientName || !amount) return res.status(400).json({ error: '客户名称和金额不能为空' });
+  if (!clientName || !amount) return res.status(400).json({ ok: false, error: 'Client name and amount are required' });
 
   const id = uuid();
 
