@@ -80,8 +80,9 @@ const SPAM_PATTERNS = [
   /rate your/i, /review your.*purchase/i,
 ];
 
-// Business-related keywords — messages containing these are likely photography clients
+// Business-related keywords — messages containing these are likely real clients
 const BUSINESS_PATTERNS = [
+  // Photography specific
   /photograph/i, /shoot/i, /wedding/i, /portrait/i, /session/i,
   /package/i, /price/i, /quote/i, /estimate/i, /available/i,
   /book/i, /schedule/i, /date/i, /venue/i, /coverage/i,
@@ -92,6 +93,16 @@ const BUSINESS_PATTERNS = [
   /looking for a photographer/i, /need a photographer/i,
   /do you (do|shoot|photograph|cover)/i, /interested in/i,
   /checking in/i, /following up/i, /just wanted to/i,
+  // General business inquiry (real people asking questions)
+  /\?/, // Any question mark — real people ask questions
+  /^(hi|hey|hello|dear|good morning|good afternoon)\b/im, // Greeting
+  /(thanks|thank you|appreciate|best|regards|cheers)/i, // Polite
+  /^(my name is|I am|I'm|we are|we're)\b/im, // Self-intro
+  /(looking for|interested in|do you|could you|would you|can you|wondering)/i, // Inquiry
+  /(let me know|get back to me|reply|respond|contact)/i, // Expecting reply
+  /(recommend|suggest|advice|opinion|thoughts)/i, // Asking for opinion
+  /(talk|chat|call|meet|discuss)/i, // Want to communicate
+  /(week|month|year|tomorrow|next week|this week)/i, // Time reference
 ];
 
 const STAGE_KEYWORDS: Record<string, string[]> = {
@@ -120,18 +131,17 @@ function detectCategory(body: string, subject: string): 'urgent' | 'normal' | 's
   // Urgent check first
   if (URGENT_PATTERNS.some(p => p.test(text))) return 'urgent';
 
-  // Strong spam signal: matches spam patterns AND no business keywords
   const spamMatches = SPAM_PATTERNS.filter(p => p.test(text)).length;
   const bizMatches = BUSINESS_PATTERNS.filter(p => p.test(text)).length;
+  const isShort = text.length < 200;
 
-  // Heavily weighted: if spam signals dominate and no business context, mark spam
+  // Only mark as spam if OVERWHELMING evidence — false positive is worse than false negative
+  // 3+ spam signals, zero business → definitely spam
   if (spamMatches >= 3 && bizMatches === 0) return 'spam';
-  if (spamMatches >= 2 && bizMatches === 0 && text.length < 500) return 'spam';
-  // Single strong spam signal without business context → spam
-  if (spamMatches >= 1 && bizMatches === 0 && text.length < 200) return 'spam';
-  // Promotional/automated content that doesn't look like a real person emailing
-  if (spamMatches >= 2 && bizMatches <= 1) return 'spam';
+  // 2+ spam signals on a short message with zero business → likely spam
+  if (spamMatches >= 2 && bizMatches === 0 && isShort) return 'spam';
 
+  // Everything else: normal (let human review borderline cases)
   return 'normal';
 }
 

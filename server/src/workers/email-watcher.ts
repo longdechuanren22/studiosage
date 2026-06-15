@@ -41,7 +41,7 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
         const bodyName = extractNameFromBody(msg.body || '');
 
         // Reputation: known client vs unknown sender
-        const isKnownSender = fromEmail && knownSenders.has(fromEmail.toLowerCase());
+        const isKnownSender: boolean = !!fromEmail && knownSenders.has(fromEmail.toLowerCase());
 
         // Classify the message
         const classification = await classifyMessage(msg.body || '', msg.subject || '', {
@@ -49,19 +49,10 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
           fromEmail: fromEmail || undefined,
         } as any);
 
-        // Aggressive spam rules for unknown senders
-        let isSpam = classification.category === 'spam';
-        if (!isSpam && !isKnownSender) {
-          // Unknown sender with no business keywords → likely spam
-          const hasBusinessKeywords = /photograph|shoot|wedding|portrait|session|package|price|quote|booking|available|date|venue|coverage|album/i
-            .test(msg.subject + ' ' + (msg.body || '').slice(0, 500));
-          const hasPromoHeaders = /unsubscribe|bulk|newsletter|campaign|marketing/i.test(msg.subject || '');
-          const isShortGeneric = (msg.body || '').length < 100 && !msg.subject?.includes('?');
-
-          if (hasPromoHeaders || (isShortGeneric && !hasBusinessKeywords)) {
-            isSpam = true;
-          }
-        }
+        // Spam detection: only mark as spam if MULTIPLE strong signals
+        // Principle: false negatives (spam in inbox) > false positives (real client hidden)
+        const spamScore = calcSpamScore(msg.subject || '', msg.body || '', isKnownSender);
+        const isSpam = classification.category === 'spam' || spamScore >= 3;
 
         // Determine best name: body signature > email header > email username
         const bestName = bodyName || fromName;
@@ -165,4 +156,60 @@ function detectServiceType(subject: string, body: string): string | null {
   if (/event|party|birthday|corporate event|gala|conference/i.test(text)) return 'event';
   if (/commercial|product|real estate|food|fashion|catalog/i.test(text)) return 'commercial';
   return null;
+}
+
+// Conservative spam scoring: only mark as spam if multiple strong signals
+// Returns 0-5, threshold >= 3 = spam
+function calcSpamScore(subject: string, body: string, isKnownSender: boolean): number {
+  const text = (subject + ' ' + body.slice(0, 1000)).toLowerCase();
+  let score = 0;
+
+  // Strong spam signals (each adds 1 point)
+  const strongSpam = [
+    /unsubscribe|opt.out|email preferences|update your subscription/i,
+    /\b(SEO|backlink|guest post|sponsor)\b/i,
+    /(buy|purchase).*(followers|likes|traffic|views)/i,
+    /congratulations.*(winner|won|selected|chosen)/i,
+    /earn.*(money|cash|income|dollar).*(home|online)/i,
+    /limited.time.offer|act.now|don't miss out|exclusive deal/i,
+    /casino|gambling|poker|betting|lottery|jackpot/i,
+    /adult|xxx|porn|escort|dating site/i,
+    /pharmacy|viagra|cialis|weight loss pill|diet pill/i,
+    /work.from.home.*(earn|income|salary)/i,
+    /loan.*approv|credit.*repair|debt.*(relief|consolidat)/i,
+    /invoice.*(attachment|attached|overdue|unpaid).*scam/i,
+    /verify.*(account|identity|payment).*click/i,
+    /security.*(alert|breach|compromis).*verify/i,
+    /nigerian|prince|inheritance|western union|money transfer/i,
+  ];
+  for (const p of strongSpam) { if (p.test(text)) score += 1; }
+
+  // Bulk/marketing signals (each adds 0.5, rounded up)
+  const bulkSignals = [
+    /view (in|online|as webpage|in browser)/i,
+    /(weekly|monthly|daily).*(newsletter|digest|roundup)/i,
+    /(webinar|free ebook|whitepaper|case study)/i,
+    /(sale|discount|promo|clearance).*(off|code|ends)/i,
+    /(shipping|tracking|package|delivery).*(update|confirm|notification)/i,
+    /(order|receipt|purchase).*(confirm|#|number)/i,
+    /(facebook|instagram|linkedin|twitter|tiktok|snapchat|pinterest).*(notif|mention|follow)/i,
+    /(cloud|drive|storage).*(full|upgrade|limit)/i,
+  ];
+  let bulkCount = bulkSignals.filter(p => p.test(text)).length;
+  score += Math.ceil(bulkCount * 0.5);
+
+  // From known sender → -2 points (unlikely to be spam)
+  if (isKnownSender) score -= 2;
+
+  // Looks like a real person writing → -1 point
+  const humanSignals = [
+    /\?/, // Has a question
+    /^(hi|hey|hello|dear|good morning|good afternoon)\b/im, // Greeting
+    /(thanks|thank you|appreciate|best regards|cheers)/i, // Polite closing
+    /^(my name is|I am|I'm|we are|we're)\b/im, // Self-introduction
+    /(looking for|interested in|do you|could you|would you|can you|wondering if)/i, // Inquiry language
+  ];
+  if (humanSignals.some(p => p.test(text))) score -= 1;
+
+  return Math.max(0, score);
 }
