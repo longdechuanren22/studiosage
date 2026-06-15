@@ -323,8 +323,8 @@ function generateSmartReply(body: string, subject: string, stage: string, ctx?: 
 // Detect the type of photography shoot from email content
 function detectShootType(text: string): string | null {
   // Chinese patterns first (for QQ/163 mailboxes)
-  if (/周岁|百天|满月|宝宝|婴儿|孩子|儿童|亲子|小孩|宝贝|萌宝/i.test(text)) return 'child';
-  if (/生日.*(拍|照|摄影|写真|聚会|派对|庆祝)/i.test(text) || /(拍|照|摄影).*生日/i.test(text)) return 'birthday';
+  if (/周岁|百天|满月|生日.*(拍|照|摄影|写真|聚会|派对|庆祝)/i.test(text) || /(拍|照|摄影).*生日/i.test(text) || /(拍|照|摄影).*(?:周岁|百天|满月)/i.test(text)) return 'birthday';
+  if (/宝宝|婴儿|孩子|儿童|亲子|小孩|宝贝|萌宝/i.test(text)) return 'child';
   if (/孕妇|孕照|孕期|大肚子|怀孕/i.test(text)) return 'maternity';
   if (/婚礼|婚庆|结婚|新娘|新郎|订婚|婚纱/i.test(text)) return 'wedding';
   if (/写真|个人|形象|肖像/i.test(text)) return 'portrait';
