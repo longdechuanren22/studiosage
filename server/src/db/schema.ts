@@ -214,10 +214,26 @@ function runMigrations(db: SqlJsDatabase) {
   addCol('clients', 'status', "TEXT DEFAULT 'active'");
   addCol('messages', 'channel', "TEXT DEFAULT 'email'");
   addCol('messages', 'thread_id', "TEXT DEFAULT NULL");
+  addCol('messages', 'imap_uid', 'TEXT');
   addCol('users', 'password_hash', 'TEXT');
 
   // Add UNIQUE constraint on tool_connections (safe: ALTER TABLE ADD CONSTRAINT fails silently if exists)
   try { db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch (_) { }
+  // Fast dedup lookup for email watcher
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_messages_imap_uid ON messages(user_id, imap_uid)'); } catch (_) { }
+
+  // One-time cleanup: remove old messages without imap_uid (pre-dedup-fix era)
+  // The email watcher will re-fetch and store them correctly with imap_uid
+  try {
+    const result = db.exec(`SELECT COUNT(*) as cnt FROM messages WHERE channel = 'email' AND imap_uid IS NULL`);
+    if (result.length > 0 && result[0].values.length > 0) {
+      const count = result[0].values[0][0] as number;
+      if (count > 0) {
+        db.run(`DELETE FROM messages WHERE channel = 'email' AND imap_uid IS NULL`);
+        console.log(`[DB] Cleaned up ${count} old messages — will re-fetch with dedup`);
+      }
+    }
+  } catch (_) { /* Silent — migration only */ }
 
   // Initial save after migrations
   const data = db.export();
