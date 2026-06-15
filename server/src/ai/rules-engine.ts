@@ -34,7 +34,22 @@ const SPAM_PATTERNS = [
   /\b(SEO|backlink|guest post|sponsor|followers|traffic)\b/i,
   /(facebook|instagram|linkedin|twitter|tiktok|snapchat|pinterest).*(notif|mention|follow|like|comment)/i,
 
-  // ── Supplementary: Chinese spam (common for QQ/163/126 mailboxes) ──
+  // ── Photographer-specific scams/spam (from industry research) ──
+  /your website.*(?:isn'?t|not).*ranking/i, /page 1 of google/i,
+  /broken links.*(?:on|found).*site/i, /SEO.*(?:audit|report|improve)/i,
+  /guest (?:post|article).*(?:photography|photo|blog)/i,
+  /feature your (?:work|photo|image).*(?:magazine|blog|website)/i,
+  /times square.*(?:photo|image|feature)/i,
+  /overpayment|over.paid|cashier.?s check|refund.*difference/i,
+  /hearing.impaired|out of (?:town|country).*(?:only|communicate).*email/i,
+  /(?:god bless|in good health).*(?:photography|booking)/i,
+  /fake.*(?:invoice|payment)|(?:quickbooks|paypal).*(?:verify|confirm|update)/i,
+  /copyright.*(?:infringement|violation|notice).*(?:image|photo|picture)/i,
+  /directory.*(?:listing|submission).*(?:photography|photographer)/i,
+  /(?:finder'?s|finders).*fee.*photographer/i,
+  /sponsor.*(?:post|content|article).*(?:photography|photo)/i,
+
+  // ── Supplementary: Chinese spam ──
   /\(AD\)|（广告）|\[广告\]/,
   /会员.*开通|会员.*到期|VIP.*开通/,
   /星座|运势|horoscope/i,
@@ -269,15 +284,26 @@ function generateSmartReply(body: string, subject: string, stage: string, ctx?: 
       reply += `Thanks for reaching out! `;
     }
 
-    // Respond to specific questions
+    // Respond to specific questions with accurate pricing
     if (hasBudget && shootType) {
       const prices: Record<string, string> = {
-        wedding: 'Wedding packages start at $3,500 for 8 hours of coverage.',
-        portrait: 'Portrait sessions start at $450 for 1 hour.',
+        wedding: 'Wedding packages start at $3,500 for 8 hours of coverage with 2 photographers.',
+        portrait: 'Portrait sessions start at $450 for 1 hour with 50+ edited images.',
+        headshot: 'Headshot sessions start at $250 for 3 looks with 10 edited images.',
         child: 'Family/child sessions start at $450 for 1 hour.',
+        newborn: 'Newborn sessions start at $500 including props and wraps.',
+        birthday: 'Birthday party coverage starts at $600 for 3 hours.',
+        maternity: 'Maternity sessions start at $450 for 1 hour.',
         event: 'Event coverage starts at $1,200 for 4 hours.',
-        newborn: 'Newborn sessions start at $500.',
-        birthday: 'Birthday party coverage starts at $600.',
+        graduation: 'Graduation sessions start at $350.',
+        pet: 'Pet photography sessions start at $300.',
+        concert: 'Concert/performance coverage starts at $800.',
+        sports: 'Sports/action coverage starts at $600.',
+        commercial: 'Commercial rates vary by project — let me know the scope and I\'ll quote.',
+        food: 'Food photography starts at $500 per session.',
+        fashion: 'Fashion/editorial rates are project-based — happy to discuss details.',
+        realestate: 'Real estate packages start at $200 per property.',
+        boudoir: 'Boudoir sessions start at $500 including professional hair & makeup.',
       };
       reply += prices[shootType] || 'I\'d be happy to share my pricing with you. ';
     }
@@ -321,30 +347,77 @@ function generateSmartReply(body: string, subject: string, stage: string, ctx?: 
 }
 
 // Detect the type of photography shoot from email content
+// Expanded with 30+ genres from international photography community research
 function detectShootType(text: string): string | null {
-  // Chinese patterns first (for QQ/163 mailboxes)
+  // ── Chinese patterns (QQ/163/126 mailboxes) ──
   if (/周岁|百天|满月|生日.*(拍|照|摄影|写真|聚会|派对|庆祝)/i.test(text) || /(拍|照|摄影).*生日/i.test(text) || /(拍|照|摄影).*(?:周岁|百天|满月)/i.test(text)) return 'birthday';
   if (/宝宝|婴儿|孩子|儿童|亲子|小孩|宝贝|萌宝/i.test(text)) return 'child';
-  if (/孕妇|孕照|孕期|大肚子|怀孕/i.test(text)) return 'maternity';
+  if (/孕妇|孕照|孕期|大肚子|怀孕| maternity /i.test(text)) return 'maternity';
   if (/婚礼|婚庆|结婚|新娘|新郎|订婚|婚纱/i.test(text)) return 'wedding';
-  if (/写真|个人|形象|肖像/i.test(text)) return 'portrait';
-  if (/活动|年会|开业|庆典|会议|发布会/i.test(text)) return 'event';
-  if (/产品|商品|电商|淘宝|服装|美食/i.test(text)) return 'commercial';
+  if (/写真|个人写真|形象照|肖像/i.test(text)) return 'portrait';
+  if (/活动|年会|开业|庆典|会议|发布会|团建/i.test(text)) return 'event';
+  if (/产品|商品|电商|淘宝|服装|美食|菜品/i.test(text)) return 'commercial';
   if (/新生儿|刚出生/i.test(text)) return 'newborn';
+  if (/证件照|签证照|护照|驾照|身份证照/i.test(text)) return 'headshot';
+  if (/毕业照|毕业季|学士服|班级合影/i.test(text)) return 'graduation';
+  if (/宠物|狗狗|猫咪|猫狗|主子/i.test(text)) return 'pet';
 
-  // English patterns
-  if (/wedding|bride|groom|bridal|marriage|ceremony|reception/i.test(text)) return 'wedding';
-  if (/portrait|headshot|maternity|pregnant|pregnancy|baby bump/i.test(text)) return 'portrait';
-  if (/newborn|just born|baby.*(photo|shoot|session|picture)/i.test(text)) return 'newborn';
-  if (/(child|kid|family|toddler|baby|infant).*(photo|shoot|session|picture|portrait)/i.test(text)
-    || /(photo|shoot|session).*(child|kid|family|toddler|baby|infant)/i.test(text)) return 'child';
-  if (/birthday.*(party|celebration|photo|shoot|session)/i.test(text)
-    || /(photo|shoot).*birthday/i.test(text)) return 'birthday';
-  if (/event|party|corporate|gala|conference|celebration/i.test(text)) return 'event';
-  if (/commercial|product|real.estate|food|fashion|catalog/i.test(text)) return 'commercial';
+  // ── English patterns (international) ──
+  // Wedding & Engagement
+  if (/wedding|bride|groom|bridal|marriage|ceremony|reception|engagement|proposal|save the date|elopement/i.test(text)) return 'wedding';
 
-  // Generic photography interest
-  if (/photograph|photo|shoot|session|picture|portrait/i.test(text)) return 'portrait';
+  // Portrait & Headshot
+  if (/headshot|head shot|corporate portrait|linkedin photo|professional.*photo|actor.*headshot|model.*portfolio/i.test(text)) return 'headshot';
+  if (/portrait|portraiture|individual.*(?:photo|shoot|session)/i.test(text)) return 'portrait';
+
+  // Family & Children
+  if (/(?:family|families).*(?:photo|shoot|session|picture|portrait)/i.test(text) || /(?:photo|shoot|session).*(?:family|families)/i.test(text)) return 'child';
+  if (/(?:child|kid|toddler|baby|infant|children).*(?:photo|shoot|session|picture|portrait)/i.test(text) || /(?:photo|shoot|session).*(?:child|kid|toddler|baby|infant|children)/i.test(text)) return 'child';
+
+  // Newborn
+  if (/newborn|just born|fresh 48|hospital.*(?:photo|session)|first 48/i.test(text)) return 'newborn';
+
+  // Maternity
+  if (/maternity|pregnant|pregnancy|baby bump|expecting|bump.*(?:photo|shoot|session)/i.test(text)) return 'maternity';
+
+  // Birthday & Milestone
+  if (/birthday|first birthday|cake smash|milestone.*(?:photo|session)/i.test(text)) return 'birthday';
+
+  // Graduation & Senior
+  if (/graduation|senior portrait|senior photo|cap and gown|class of|commencement|senior session/i.test(text)) return 'graduation';
+
+  // Event & Party
+  if (/event|party|gala|conference|celebration|corporate event|holiday party|reunion|bar mitzvah|bat mitzvah|quinceañera|sweet 16/i.test(text)) return 'event';
+
+  // Concert & Performance
+  if (/concert|live music|gig|festival|performance|show|tour|band.*(?:photo|shoot)/i.test(text)) return 'concert';
+
+  // Sports & Action
+  if (/sports|athletic|game|tournament|marathon|race|triathlon|fitness|bodybuilding|competition/i.test(text)) return 'sports';
+
+  // Commercial & Product
+  if (/commercial|product|ecommerce|e-commerce|catalog|advertising|brand.*(?:photo|shoot|content)/i.test(text)) return 'commercial';
+  if (/food.*(?:photo|shoot|photography)|menu|restaurant.*(?:photo|shoot)|culinary/i.test(text)) return 'food';
+  if (/fashion|model|runway|lookbook|editorial.*(?:fashion|style)/i.test(text)) return 'fashion';
+  if (/jewelry|watch.*(?:photo|shoot)|accessor/i.test(text)) return 'commercial';
+
+  // Real Estate & Architecture
+  if (/real estate|property.*(?:photo|shoot)|listing.*photo|home.*(?:photo|shoot).*sell|interior.*(?:photo|shoot)|architecture|airbnb.*(?:photo|shoot)/i.test(text)) return 'realestate';
+
+  // Pet Photography
+  if (/pet.*(?:photo|shoot|session|picture|portrait)|dog.*(?:photo|shoot|session)|cat.*(?:photo|shoot|session)|(?:photo|shoot).*pet/i.test(text)) return 'pet';
+
+  // Boudoir
+  if (/boudoir|intimate.*(?:photo|portrait|session)|empowerment.*(?:photo|shoot)/i.test(text)) return 'boudoir';
+
+  // Travel & Destination
+  if (/destination.*(?:wedding|photo|shoot)|elopement.*(?:photo|shoot)|travel.*(?:photo|shoot)/i.test(text)) return 'wedding'; // usually wedding-related
+
+  // Drone / Aerial
+  if (/drone|aerial.*(?:photo|shoot|footage)|fly.*over.*(?:photo|shoot)/i.test(text)) return 'aerial';
+
+  // Generic photography interest (last resort)
+  if (/photograph|photo|shoot|session|camera|picture|portrait/i.test(text)) return 'portrait';
 
   return null;
 }
