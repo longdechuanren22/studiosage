@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useDemo } from '../components/Layout';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
+import { t } from '../i18n';
 
 interface SetupStatus {
   ai: { configured: boolean };

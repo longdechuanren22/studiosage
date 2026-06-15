@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
+import { t } from '../i18n';
 
 export default function Register() {
   const { user, token, loading, register } = useUser();
@@ -11,7 +12,6 @@ export default function Register() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Already authenticated — redirect to dashboard
   if (!loading && token && user) {
     return <Navigate to="/" replace />;
   }
@@ -19,15 +19,15 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!name.trim()) { setError('请输入姓名'); return; }
-    if (!email.trim()) { setError('请输入邮箱'); return; }
-    if (password.length < 6) { setError('密码至少 6 个字符'); return; }
+    if (!name.trim()) { setError(t('auth.fillAllFields')); return; }
+    if (!email.trim()) { setError(t('auth.emailInvalid')); return; }
+    if (password.length < 6) { setError(t('auth.passwordMin')); return; }
     setSubmitting(true);
     try {
       await register(email.trim(), password, name.trim());
       navigate('/', { replace: true });
     } catch (err: any) {
-      setError(err.message || '注册失败，请重试');
+      setError(err.message || t('auth.registerFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -40,7 +40,6 @@ export default function Register() {
       padding: 20, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
     }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
-        {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{
             width: 56, height: 56, borderRadius: 14, margin: '0 auto 16px',
@@ -48,11 +47,12 @@ export default function Register() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 24, color: '#fff', fontWeight: 700,
           }}>S</div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.3px', margin: 0, color: '#1D1D1F' }}>创建账号</h1>
-          <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>开始 14 天免费试用</p>
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.3px', margin: 0, color: '#1D1D1F' }}>
+            {t('auth.registerTitle')}
+          </h1>
+          <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>{t('auth.registerSubtitle')}</p>
         </div>
 
-        {/* Card */}
         <form onSubmit={handleSubmit} style={{
           background: 'rgba(255,255,255,.72)', backdropFilter: 'blur(24px)',
           borderRadius: 20, padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,.04), 0 4px 20px rgba(0,0,0,.06)',
@@ -60,37 +60,27 @@ export default function Register() {
           {error && (
             <div style={{
               padding: '10px 14px', borderRadius: 10, marginBottom: 16,
-              background: 'rgba(255,59,48,.08)', color: '#FF3B30',
-              fontSize: 13, fontWeight: 500,
+              background: 'rgba(255,59,48,.08)', color: '#FF3B30', fontSize: 13, fontWeight: 500,
             }}>{error}</div>
           )}
 
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>姓名</label>
-            <input
-              type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder="你的名字" autoComplete="name" autoFocus
-              style={inputStyle}
-            />
+            <label style={labelStyle}>{t('auth.name')}</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)}
+              placeholder={t('auth.namePlaceholder')} autoComplete="name" autoFocus style={inputStyle} />
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>邮箱</label>
-            <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="hello@studiosage.cn" autoComplete="email"
-              style={inputStyle}
-            />
+            <label style={labelStyle}>{t('auth.email')}</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="hello@studiosage.com" autoComplete="email" style={inputStyle} />
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>密码</label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="至少 6 个字符" autoComplete="new-password"
-              style={inputStyle}
-            />
-            <p style={{ fontSize: 10, color: '#AEAEB2', margin: '4px 0 0' }}>至少 6 个字符</p>
+            <label style={labelStyle}>{t('auth.password')}</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              placeholder={t('auth.passwordMin')} autoComplete="new-password" style={inputStyle} />
+            <p style={{ fontSize: 10, color: '#AEAEB2', margin: '4px 0 0' }}>{t('auth.passwordMin')}</p>
           </div>
 
           <button type="submit" disabled={submitting} style={{
@@ -99,20 +89,19 @@ export default function Register() {
             fontSize: 16, fontWeight: 700, cursor: submitting ? 'default' : 'pointer',
             letterSpacing: '-.1px', transition: 'background .15s',
           }}>
-            {submitting ? '创建中…' : '免费注册'}
+            {submitting ? t('auth.registering') : t('auth.register')}
           </button>
 
           <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#86868B' }}>
-            已有账号？{' '}
+            {t('auth.hasAccount')}{' '}
             <Link to="/login" style={{ color: '#007AFF', fontWeight: 600, textDecoration: 'none' }}>
-              登录
+              {t('auth.loginLink')}
             </Link>
           </p>
         </form>
 
-        {/* Features */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 }}>
-          {['🤖 AI 自动分类', '📧 IMAP 全覆盖', '📋 提案合同'].map(f => (
+          {['🤖 AI Auto-Classify', '📧 IMAP Inbox', '📋 Proposals'].map(f => (
             <span key={f} style={{ fontSize: 11, color: '#86868B', background: 'rgba(255,255,255,.5)', padding: '4px 10px', borderRadius: 8 }}>{f}</span>
           ))}
         </div>
@@ -122,13 +111,10 @@ export default function Register() {
 }
 
 const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 600, color: '#86868B',
-  marginBottom: 6, letterSpacing: '.2px',
+  display: 'block', fontSize: 12, fontWeight: 600, color: '#86868B', marginBottom: 6, letterSpacing: '.2px',
 };
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 14px', borderRadius: 12,
-  border: '1px solid rgba(0,0,0,.1)', fontSize: 15,
-  outline: 'none', boxSizing: 'border-box',
-  background: 'rgba(0,0,0,.02)', transition: 'border .15s',
+  width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(0,0,0,.1)',
+  fontSize: 15, outline: 'none', boxSizing: 'border-box', background: 'rgba(0,0,0,.02)',
 };

@@ -3,6 +3,7 @@ import { useDemo } from '../components/Layout';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
+import { t, tf } from '../i18n';
 
 interface Invoice {
   id: string; client_name: string; client_email: string;

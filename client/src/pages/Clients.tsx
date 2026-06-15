@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../utils/api';
+import { t } from '../i18n';
 
 interface Client {
   id: string; name: string; email: string; phone: string; wechat_id: string;
@@ -89,9 +90,7 @@ export default function Clients() {
     switch (c) { case 'email': return '📧'; case 'wechat': return '💬'; case 'sms': return '📱'; default: return '💬'; }
   };
 
-  const stageLabel = (s: string) => {
-    switch (s) { case 'inquiry': return '新咨询'; case 'engaged': return '沟通中'; case 'booked': return '已预定'; case 'shooting': return '拍摄中'; case 'delivered': return '已交付'; default: return s; }
-  };
+  const stageLabel = (s: string) => t(`clients.stage.${s}`);
 
   const categoryColor = (c: string) => c === 'urgent' ? '#FF3B30' : c === 'important' ? '#FF9500' : '#86868B';
 
@@ -107,7 +106,7 @@ export default function Clients() {
     return (
       <div>
         <button onClick={closeClient} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-          ← 返回客户列表
+          {t('clients.back')}
         </button>
 
         {/* Client header */}
@@ -216,10 +215,10 @@ export default function Clients() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-.3px' }}>👥 客户管理</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-.3px' }}>👥 {t('clients.title')}</h2>
         <button onClick={() => setShowNewClient(true)}
           style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#007AFF', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          ＋ 新建客户
+          {t('clients.newClient')}
         </button>
       </div>
 

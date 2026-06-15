@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
+import { t } from '../i18n';
 
 export default function Login() {
   const { user, token, loading, login } = useUser();
@@ -10,7 +11,6 @@ export default function Login() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Already authenticated — redirect to dashboard
   if (!loading && token && user) {
     return <Navigate to="/" replace />;
   }
@@ -18,13 +18,16 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email.trim() || !password) { setError('请填写邮箱和密码'); return; }
+    if (!email.trim() || !password) {
+      setError(t('auth.fillEmailPassword'));
+      return;
+    }
     setSubmitting(true);
     try {
       await login(email.trim(), password);
       navigate('/', { replace: true });
     } catch (err: any) {
-      setError(err.message || '登录失败，请重试');
+      setError(err.message || t('auth.loginFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -37,7 +40,6 @@ export default function Login() {
       padding: 20, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
     }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
-        {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{
             width: 56, height: 56, borderRadius: 14, margin: '0 auto 16px',
@@ -45,11 +47,12 @@ export default function Login() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 24, color: '#fff', fontWeight: 700,
           }}>S</div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.3px', margin: 0, color: '#1D1D1F' }}>StudioSage</h1>
-          <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>登录你的工作室</p>
+          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.3px', margin: 0, color: '#1D1D1F' }}>
+            {t('app.name')}
+          </h1>
+          <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>{t('auth.loginSubtitle')}</p>
         </div>
 
-        {/* Card */}
         <form onSubmit={handleSubmit} style={{
           background: 'rgba(255,255,255,.72)', backdropFilter: 'blur(24px)',
           borderRadius: 20, padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,.04), 0 4px 20px rgba(0,0,0,.06)',
@@ -63,21 +66,15 @@ export default function Login() {
           )}
 
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>邮箱</label>
-            <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="hello@studiosage.cn" autoComplete="email" autoFocus
-              style={inputStyle}
-            />
+            <label style={labelStyle}>{t('auth.email')}</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="hello@studiosage.com" autoComplete="email" autoFocus style={inputStyle} />
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>密码</label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••" autoComplete="current-password"
-              style={inputStyle}
-            />
+            <label style={labelStyle}>{t('auth.password')}</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••" autoComplete="current-password" style={inputStyle} />
           </div>
 
           <button type="submit" disabled={submitting} style={{
@@ -86,20 +83,19 @@ export default function Login() {
             fontSize: 16, fontWeight: 700, cursor: submitting ? 'default' : 'pointer',
             letterSpacing: '-.1px', transition: 'background .15s',
           }}>
-            {submitting ? '登录中…' : '登录'}
+            {submitting ? t('auth.loggingIn') : t('auth.login')}
           </button>
 
           <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#86868B' }}>
-            还没有账号？{' '}
+            {t('auth.noAccount')}{' '}
             <Link to="/register" style={{ color: '#007AFF', fontWeight: 600, textDecoration: 'none' }}>
-              免费注册
+              {t('auth.registerLink')}
             </Link>
           </p>
         </form>
 
-        {/* Footer */}
         <p style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#AEAEB2' }}>
-          注册即表示同意服务条款 · 14 天免费试用，无需信用卡
+          {t('auth.terms')}
         </p>
       </div>
     </div>
@@ -107,13 +103,10 @@ export default function Login() {
 }
 
 const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 600, color: '#86868B',
-  marginBottom: 6, letterSpacing: '.2px',
+  display: 'block', fontSize: 12, fontWeight: 600, color: '#86868B', marginBottom: 6, letterSpacing: '.2px',
 };
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 14px', borderRadius: 12,
-  border: '1px solid rgba(0,0,0,.1)', fontSize: 15,
-  outline: 'none', boxSizing: 'border-box',
-  background: 'rgba(0,0,0,.02)', transition: 'border .15s',
+  width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(0,0,0,.1)',
+  fontSize: 15, outline: 'none', boxSizing: 'border-box', background: 'rgba(0,0,0,.02)',
 };
