@@ -11,25 +11,39 @@ const URGENT_PATTERNS = [
 // Broad spam detection: newsletters, promos, receipts, automated, social, etc.
 // Includes Chinese-language spam patterns (QQ/163/126 mailboxes)
 const SPAM_PATTERNS = [
-  // ── Chinese-specific spam (extremely common in QQ/163/126 mailboxes) ──
-  /广告|营销|推广|促销|优惠|折扣|满减|秒杀|清仓|特价|甩卖/,
+  // ── Known spam domains (REAL data from QQ mailbox) ──
+  /@linkedin\.com/i, /@steampowered\.com/i, /@newsletter\./i,
+  /noreply@/i, /no-reply@/i, /jobs-listings@/i, /messages-noreply@/i,
+  /invitations@linkedin/i,
+
+  // ── Subject-based spam (from REAL emails seen in inbox) ──
+  /\(AD\)|（广告）|\[广告\]/,           // NIKE
+  /会员.*开通|会员.*到期|VIP.*开通/,      // Tencent
+  /星座|运势|horoscope/i,                // 星星一族
+  /特卖|促销|折扣|优惠|降价|打折|清仓|甩卖/,  // Steam
+  /招聘|求职|简历|猎头|内推|offer|面试/,   // LinkedIn
+  /职业.*档案|职业.*背景|看过.*档案/,       // LinkedIn
+  /添加.*好友|认可.*成就|成为.*好友/,       // LinkedIn
+  /专属推荐|为你推荐|猜你喜欢|精选推荐/,
+
+  // ── Generic Chinese spam ──
+  /广告|营销|推广|满减|秒杀|特价/,
   /订阅|退订|不再接收|邮件订阅|邮件列表|mailing list/i,
   /系统通知|系统邮件|自动发送|自动生成|请勿回复|do not reply/i,
-  /验证码|验证邮件|激活账号|激活账户|确认注册|确认你的.*(账号|账户)/,
-  /安全提醒|安全通知|登录提醒|登录通知|异地登录|新设备登录/,
+  /验证码|验证邮件|激活账号|激活账户|安全提醒|安全通知|登录提醒|异地登录/,
   /账单|对账|流水|交易提醒|消费提醒|扣款通知|还款提醒/,
   /快递|物流|配送|发货|收货|包裹|签收|运单/,
-  /充值|缴费|续费|会员|VIP|积分/,
-  /招聘|求职|简历|猎头|内推|offer|面试/,
-  /恭喜.*中奖|恭喜.*获得|免费领取|免费获得|0元|免费试用(?!.*StudioSage)/,
+  /充值|缴费|续费|积分.*兑换|积分.*清零/,
+  /恭喜.*中奖|恭喜.*获得|免费领取|免费获得|0元.*领/,
   /点击.*链接|点击查看|查看详情|立即查看|立即购买|立即参与/,
   /转发.*(得|送|赚)|分享.*(得|送|赚)|邀请.*(得|送|赚)/,
   /关注.*公众号|扫码|二维码|加微信|加群|入群/,
-  /京东|淘宝|天猫|拼多多|美团|饿了么|抖音|快手/,
+  /(京东|淘宝|天猫|拼多多|美团|饿了么|抖音|快手).*(店|商城|旗舰|官方)/,
   /信用卡|贷款|借款|理财|基金|股票|保险|免息/,
   /学位|学历|培训|课程|考证|报名|学习/,
   /发票代开|代开发票|办理.*证件|刻章/,
   /赌博|博彩|彩票|六合彩|棋牌|赌场/,
+  /(在家|手机).*(赚钱|兼职|日结|月入)/,
 
   // ── English spam ──
   // Marketing / newsletters

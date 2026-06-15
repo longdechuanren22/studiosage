@@ -51,7 +51,7 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
 
         // Spam detection: only mark as spam if MULTIPLE strong signals
         // Principle: false negatives (spam in inbox) > false positives (real client hidden)
-        const spamScore = calcSpamScore(msg.subject || '', msg.body || '', isKnownSender);
+        const spamScore = calcSpamScore(msg.subject || '', msg.body || '', isKnownSender, fromEmail || '');
         const isSpam = classification.category === 'spam' || spamScore >= 3;
 
         // Determine best name: body signature > email header > email username
@@ -158,11 +158,25 @@ function detectServiceType(subject: string, body: string): string | null {
   return null;
 }
 
-// Conservative spam scoring: only mark as spam if multiple strong signals
+// Known non-client domains — these are ALWAYS spam/marketing
+const NON_CLIENT_DOMAINS = [
+  'linkedin.com', 'steampowered.com', 'tencent.com', 'nike.com', 'nike.com.cn',
+  'newsletter.', 'horoscopofree.com', 'amazon.com', 'aliexpress.com',
+  'jd.com', 'taobao.com', 'tmall.com', 'pinduoduo.com',
+];
+
+function isNonClientDomain(email: string): boolean {
+  return NON_CLIENT_DOMAINS.some(d => email.toLowerCase().includes(d));
+}
+
+// Conservative spam scoring based on REAL email analysis
 // Returns 0-5, threshold >= 3 = spam
-function calcSpamScore(subject: string, body: string, isKnownSender: boolean): number {
+function calcSpamScore(subject: string, body: string, isKnownSender: boolean, fromEmail: string): number {
   const text = (subject + ' ' + body.slice(0, 1000)).toLowerCase();
   let score = 0;
+
+  // Known non-client domain → instant +2 (LinkedIn, Steam, Nike, etc.)
+  if (fromEmail && isNonClientDomain(fromEmail)) score += 2;
 
   // Strong spam signals (each adds 1 point)
   const strongSpam = [
