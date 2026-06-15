@@ -14,9 +14,9 @@ interface Invoice {
 }
 
 const DEMO_INVOICES: Invoice[] = [
-  { id:'d-INV-042', client_name:'Sarah & Mike', client_email:'sarah@example.com', amount:4500, currency:'USD', description:'婚礼全包套餐', status:'sent', retainer_type:'定金（不退）', payment_schedule:'three-phase', stripe_payment_link:'https://buy.stripe.com/test_demo1', items:[{description:'婚礼拍摄', unitPrice:3000, quantity:1},{description:'相册设计', unitPrice:1500, quantity:1}], created_at:new Date().toISOString() },
-  { id:'d-INV-041', client_name:'David L.', client_email:'david@example.com', amount:850, currency:'USD', description:'肖像拍摄', status:'draft', payment_schedule:'single', created_at:new Date().toISOString() },
-  { id:'d-INV-040', client_name:'Jennifer K.', client_email:'jennifer@example.com', amount:3400, currency:'USD', description:'婚礼当日跟拍', status:'paid', payment_schedule:'three-phase', stripe_payment_link:'https://buy.stripe.com/test_demo2', created_at:new Date(Date.now()-86400000*3).toISOString() },
+  { id:'d-INV-042', client_name:'Sarah & Mike', client_email:'sarah@example.com', amount:4500, currency:'USD', description:'Wedding Full Package', status:'sent', retainer_type:'Non-refundable retainer', payment_schedule:'three-phase', stripe_payment_link:'https://buy.stripe.com/test_demo1', items:[{description:'Wedding coverage', unitPrice:3000, quantity:1},{description:'Album design', unitPrice:1500, quantity:1}], created_at:new Date().toISOString() },
+  { id:'d-INV-041', client_name:'David L.', client_email:'david@example.com', amount:850, currency:'USD', description:'Portrait Session', status:'draft', payment_schedule:'single', created_at:new Date().toISOString() },
+  { id:'d-INV-040', client_name:'Jennifer K.', client_email:'jennifer@example.com', amount:3400, currency:'USD', description:'Wedding Day Coverage', status:'paid', payment_schedule:'three-phase', stripe_payment_link:'https://buy.stripe.com/test_demo2', created_at:new Date(Date.now()-86400000*3).toISOString() },
 ];
 
 export default function Invoices() {
@@ -315,10 +315,10 @@ export default function Invoices() {
 
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; color: string; label: string }> = {
-    draft: { bg: 'rgba(142,142,147,.1)', color: '#8E8E93', label: '草稿' },
-    sent: { bg: 'rgba(255,149,0,.1)', color: '#FF9500', label: '待付' },
-    paid: { bg: 'rgba(52,199,89,.1)', color: '#34C759', label: '已付' },
-    overdue: { bg: 'rgba(255,59,48,.1)', color: '#FF3B30', label: '逾期' },
+    draft: { bg: 'rgba(142,142,147,.1)', color: '#8E8E93', label: 'Draft' },
+    sent: { bg: 'rgba(255,149,0,.1)', color: '#FF9500', label: 'Unpaid' },
+    paid: { bg: 'rgba(52,199,89,.1)', color: '#34C759', label: 'Paid' },
+    overdue: { bg: 'rgba(255,59,48,.1)', color: '#FF3B30', label: 'Overdue' },
   };
   const c = config[status] || config.draft;
   return (

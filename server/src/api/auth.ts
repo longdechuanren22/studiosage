@@ -10,14 +10,14 @@ import { z } from 'zod';
 const router: RouterType = Router();
 
 const registerSchema = z.object({
-  email: z.string().email('请输入有效的邮箱地址'),
-  password: z.string().min(6, '密码至少6个字符'),
-  name: z.string().min(1, '请输入姓名'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  name: z.string().min(1, 'Name is required'),
 });
 
 const loginSchema = z.object({
-  email: z.string().email('请输入有效的邮箱地址'),
-  password: z.string().min(1, '请输入密码'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 // POST /api/auth/register
@@ -28,7 +28,7 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
 
     const existing = queryOne('SELECT id FROM users WHERE email = ?', [email]);
     if (existing) {
-      res.status(409).json({ ok: false, error: '该邮箱已注册', code: 'EMAIL_EXISTS' });
+      res.status(409).json({ ok: false, error: 'Email already registered', code: 'EMAIL_EXISTS' });
       return;
     }
 
@@ -58,19 +58,18 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
 
     const user = queryOne('SELECT * FROM users WHERE email = ?', [email]) as any;
     if (!user) {
-      res.status(401).json({ ok: false, error: '邮箱或密码不正确', code: 'INVALID_CREDENTIALS' });
+      res.status(401).json({ ok: false, error: 'Invalid email or password', code: 'INVALID_CREDENTIALS' });
       return;
     }
 
-    // Support legacy users without password_hash (default user)
     if (!user.password_hash) {
-      res.status(401).json({ ok: false, error: '该账号尚未设置密码，请先注册', code: 'NO_PASSWORD' });
+      res.status(401).json({ ok: false, error: 'Account not set up. Please register first.', code: 'NO_PASSWORD' });
       return;
     }
 
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
-      res.status(401).json({ ok: false, error: '邮箱或密码不正确', code: 'INVALID_CREDENTIALS' });
+      res.status(401).json({ ok: false, error: 'Invalid email or password', code: 'INVALID_CREDENTIALS' });
       return;
     }
 

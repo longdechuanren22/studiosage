@@ -10,7 +10,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <div style={{ textAlign: 'center', color: '#86868B' }}>
           <div style={{ width: 32, height: 32, border: '3px solid #E5E5EA', borderTopColor: '#007AFF', borderRadius: '50%', animation: 'spin .6s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ fontSize: 14, margin: 0 }}>加载中…</p>
+          <p style={{ fontSize: 14, margin: 0 }}>Loading…</p>
         </div>
       </div>
     );

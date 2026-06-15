@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 const envSecret = process.env.JWT_SECRET;
 if (!envSecret) {
-  throw new Error('JWT_SECRET 环境变量未设置！生产环境必须配置此变量。');
+  throw new Error('JWT_SECRET environment variable is required');
 }
 const JWT_SECRET: string = envSecret;
 const TOKEN_EXPIRY = '7d';
@@ -37,7 +37,7 @@ declare global {
 export function authenticate(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
-    res.status(401).json({ ok: false, error: '请先登录', code: 'UNAUTHORIZED' });
+    res.status(401).json({ ok: false, error: 'Authentication required', code: 'UNAUTHORIZED' });
     return;
   }
   try {
@@ -46,7 +46,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     req.userEmail = payload.email;
     next();
   } catch {
-    res.status(401).json({ ok: false, error: '登录已过期，请重新登录', code: 'TOKEN_EXPIRED' });
+    res.status(401).json({ ok: false, error: 'Session expired. Please sign in again.', code: 'TOKEN_EXPIRED' });
   }
 }
 
