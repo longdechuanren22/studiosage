@@ -9,6 +9,7 @@ import Onboarding from './pages/Onboarding';
 import Connect from './pages/Connect';
 import Invoices from './pages/Invoices';
 import Proposals from './pages/Proposals';
+import Calendar from './pages/Calendar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import PortalProposal from './pages/PortalProposal';
@@ -32,6 +33,7 @@ export default function App() {
                 <Route path="/inbox" element={<Navigate to="/clients" replace />} />
                 <Route path="/invoices" element={<Invoices />} />
                 <Route path="/proposals" element={<Proposals />} />
+                <Route path="/calendar" element={<Calendar />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/connect" element={<Connect />} />
