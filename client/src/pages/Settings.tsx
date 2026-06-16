@@ -36,45 +36,31 @@ export default function Settings() {
     try { await api.patch('/api/settings/auto-reply', { enabled: next }); } catch {}
   };
 
-  const connections = [
+  // Platform services — managed by StudioSage, visible to customer as status
+  const platformServices = [
     {
-      key: 'email', icon: '📧', label: 'Work Email',
-      desc: 'AI reads emails, classifies clients, drafts replies',
-      connected: status?.email?.connected,
-      detail: status?.email?.email || '',
-      action: 'Configure', actionLink: '/connect',
+      key: 'ai', icon: '🤖', label: 'AI Assistant',
+      desc: status?.ai?.configured
+        ? 'Smart classification, auto-replies, and proposal generation are active.'
+        : 'AI features are being set up. Offline mode active in the meantime.',
+      active: status?.ai?.configured,
+      activeLabel: 'Active', inactiveLabel: 'Offline Mode',
     },
     {
-      key: 'ai', icon: '🤖', label: 'AI Engine (DeepSeek)',
-      desc: 'Powers auto-classification, smart replies & proposal generation',
-      connected: status?.ai?.configured,
-      detail: status?.ai?.configured ? 'DEEPSEEK_API_KEY set' : 'Set DEEPSEEK_API_KEY in .env',
-      action: status?.ai?.configured ? undefined : 'Setup Guide',
-      actionLink: status?.ai?.configured ? undefined : 'https://platform.deepseek.com/api_keys',
+      key: 'stripe', icon: '💳', label: 'Online Payments',
+      desc: status?.stripe?.configured
+        ? 'Stripe payments are active. Send invoices and accept cards.'
+        : 'Payment processing is being configured. Invoice PDFs still work.',
+      active: status?.stripe?.configured,
+      activeLabel: 'Active', inactiveLabel: 'Coming Soon',
     },
     {
-      key: 'stripe', icon: '💳', label: 'Stripe Payments',
-      desc: 'Online payments, invoices & automatic payment tracking',
-      connected: status?.stripe?.configured,
-      detail: status?.stripe?.configured ? 'STRIPE_SECRET_KEY set' : 'Set STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET in .env',
-      action: status?.stripe?.configured ? 'Stripe Dashboard' : 'Setup Guide',
-      actionLink: status?.stripe?.configured ? 'https://dashboard.stripe.com' : 'https://docs.stripe.com/webhooks',
-    },
-    {
-      key: 'pixieset', icon: '🖼', label: 'Pixieset Gallery',
-      desc: 'Client gallery delivery, print sales & album proofing',
-      connected: status?.pixieset?.configured,
-      detail: status?.pixieset?.configured ? 'PIXIESET_API_KEY set' : 'Set PIXIESET_API_KEY in .env',
-      action: 'Setup Guide',
-      actionLink: 'https://pixieset.com/help/article/135-api-key/',
-    },
-    {
-      key: 'google', icon: '📅', label: 'Google Calendar',
-      desc: 'Sync shoots, appointments & availability. Auto-scheduling for clients.',
-      connected: status?.google?.configured,
-      detail: status?.google?.configured ? 'GOOGLE_CLIENT_ID + SECRET set' : 'Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET in .env',
-      action: 'Google Cloud Console',
-      actionLink: 'https://console.cloud.google.com/apis/credentials',
+      key: 'pixieset', icon: '🖼', label: 'Gallery Delivery',
+      desc: status?.pixieset?.configured
+        ? 'Pixieset galleries are ready for client delivery.'
+        : 'Gallery integration coming soon.',
+      active: status?.pixieset?.configured,
+      activeLabel: 'Active', inactiveLabel: 'Coming Soon',
     },
   ];
 
@@ -118,42 +104,65 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Connections — main business tools */}
+      {/* Customer connection — email is the only thing customer configures */}
       <div>
-        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, letterSpacing: '-.1px' }}>{lang === 'zh' ? '业务连接' : 'Business Connections'}</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, letterSpacing: '-.1px' }}>{lang === 'zh' ? '你的连接' : 'Your Connection'}</h3>
+        <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,.04)', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ fontSize: 28, flexShrink: 0 }}>📧</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>Work Email</span>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                background: status?.email?.connected ? 'rgba(52,199,89,.1)' : 'rgba(255,149,0,.1)',
+                color: status?.email?.connected ? '#34C759' : '#FF9500',
+              }}>
+                {status?.email?.connected
+                  ? (lang === 'zh' ? '● 已连接' : '● Connected')
+                  : (lang === 'zh' ? '○ 未连接' : '○ Not Connected')}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: '#86868B' }}>
+              {status?.email?.connected
+                ? `${status.email.email} · AI monitoring every 60s`
+                : 'Connect your work email to enable AI auto-classification and replies.'}
+            </div>
+          </div>
+          <button onClick={() => navigate('/connect')} style={{
+            padding: '7px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+            background: status?.email?.connected ? 'rgba(0,122,255,.06)' : '#007AFF',
+            color: status?.email?.connected ? '#007AFF' : '#fff',
+            border: 'none', cursor: 'pointer',
+          }}>
+            {status?.email?.connected ? (lang === 'zh' ? '管理' : 'Manage') : (lang === 'zh' ? '连接' : 'Connect')}
+          </button>
+        </div>
+      </div>
+
+      {/* Platform services — managed by StudioSage, status-only for customer */}
+      <div>
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, letterSpacing: '-.1px' }}>{lang === 'zh' ? '平台服务' : 'Platform Services'}</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {connections.map(conn => (
-            <div key={conn.key} style={{
+          {platformServices.map(svc => (
+            <div key={svc.key} style={{
               background: '#fff', borderRadius: 14, padding: '16px 20px',
               boxShadow: '0 1px 3px rgba(0,0,0,.04)',
               display: 'flex', alignItems: 'center', gap: 16,
-              opacity: conn.connected ? 1 : .85,
+              opacity: svc.active ? 1 : .7,
             }}>
-              <div style={{ fontSize: 28, flexShrink: 0 }}>{conn.icon}</div>
+              <div style={{ fontSize: 28, flexShrink: 0 }}>{svc.icon}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>{conn.label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>{svc.label}</span>
                   <span style={{
                     fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
-                    background: conn.connected ? 'rgba(52,199,89,.1)' : 'rgba(142,142,147,.1)',
-                    color: conn.connected ? '#34C759' : '#8E8E93',
+                    background: svc.active ? 'rgba(52,199,89,.1)' : 'rgba(142,142,147,.1)',
+                    color: svc.active ? '#34C759' : '#8E8E93',
                   }}>
-                    {conn.connected ? (lang === 'zh' ? '● 已连接' : '● Connected') : (lang === 'zh' ? '○ 未连接' : '○ Not Connected')}
+                    {svc.active ? svc.activeLabel : svc.inactiveLabel}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: '#86868B' }}>{conn.desc}</div>
-                {conn.detail && <div style={{ fontSize: 11, color: '#AEAEB2', marginTop: 2 }}>{conn.detail}</div>}
+                <div style={{ fontSize: 12, color: '#86868B' }}>{svc.desc}</div>
               </div>
-              {conn.action && conn.actionLink && (
-                <a href={conn.actionLink} target="_blank" rel="noopener noreferrer" style={{
-                  padding: '7px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600,
-                  background: conn.connected ? 'rgba(0,122,255,.06)' : '#007AFF',
-                  color: conn.connected ? '#007AFF' : '#fff',
-                  border: 'none', cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap',
-                }} onClick={e => { if (!conn.actionLink!.startsWith('http')) { e.preventDefault(); navigate(conn.actionLink!); } }}>
-                  {conn.action}
-                </a>
-              )}
             </div>
           ))}
         </div>
