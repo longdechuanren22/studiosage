@@ -31,8 +31,8 @@ export default function Invoices() {
   const fetchInvoices = () => {
     setLoading(true);
     if (demo) { setInvoices(DEMO_INVOICES); setLoading(false); return; }
-    api.get<Invoice[]>('/api/invoices')
-      .then(data => setInvoices(Array.isArray(data) ? data : []))
+    api.get<{ invoices: Invoice[] }>('/api/invoices')
+      .then(data => setInvoices(Array.isArray(data?.invoices) ? data.invoices : Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));
   };

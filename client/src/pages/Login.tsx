@@ -95,6 +95,12 @@ export default function Login() {
           <p style={{ textAlign: 'center', marginTop: 8, fontSize: 12 }}>
             <Link to="/forgot-password" style={{ color: '#AEAEB2', textDecoration: 'none' }}>Forgot password?</Link>
           </p>
+          <p style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: '#C7C7CC' }}>
+            By signing in you agree to our{' '}
+            <Link to="/terms" style={{ color: '#AEAEB2' }}>Terms</Link>
+            {' '}and{' '}
+            <Link to="/privacy" style={{ color: '#AEAEB2' }}>Privacy Policy</Link>
+          </p>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#AEAEB2' }}>

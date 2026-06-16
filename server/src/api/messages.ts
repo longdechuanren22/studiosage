@@ -160,4 +160,21 @@ const PLATFORM_DOMAINS = [
 ];
 const AUTO_SENDERS = /^(noreply|no-reply|donotreply|mailer-daemon|bounce|postmaster|notifications?|messages-noreply|jobs-listings|invitations|newsletter|marketing|promo|deals|offers|sales)@/i;
 
+// Search messages by keyword
+router.get('/search', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const q = (req.query.q as string || '').trim();
+  if (!q) return res.json({ results: [] });
+
+  const results = queryAll(
+    `SELECT m.*, c.name as client_name FROM messages m
+     LEFT JOIN clients c ON m.client_id = c.id
+     WHERE m.user_id = ? AND m.category != 'spam' AND (m.subject LIKE ? OR m.body LIKE ?)
+     ORDER BY m.created_at DESC LIMIT 20`,
+    [userId, `%${q}%`, `%${q}%`]
+  );
+  res.json({ results });
+});
+
 export { router as messageRoutes };

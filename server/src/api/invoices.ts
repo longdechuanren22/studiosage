@@ -8,15 +8,21 @@ import { generateInvoicePdf } from '../utils/pdf.js';
 
 const router: RouterType = Router();
 
-// List all invoices
+// List invoices with optional pagination
 router.get('/', async (req, res) => {
   await initDb();
   const userId = req.userId!;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const offset = (page - 1) * limit;
+
   const invoices = queryAll(
-    'SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
-    [userId]
+    'SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    [userId, limit, offset]
   );
-  res.json(invoices);
+  const total = (queryOne('SELECT COUNT(*) as count FROM invoices WHERE user_id = ?', [userId]) as any)?.count || 0;
+
+  res.json({ invoices, total, page, totalPages: Math.ceil(total / limit) });
 });
 
 // Get single invoice

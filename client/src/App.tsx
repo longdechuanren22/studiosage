@@ -14,6 +14,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import PortalProposal from './pages/PortalProposal';
 import ForgotPassword from './pages/ForgotPassword';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 
 export default function App() {
   return (
@@ -23,6 +25,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/portal/proposal/:shareToken" element={<PortalProposal />} />
 
         {/* Protected app routes — Layout + auth required */}

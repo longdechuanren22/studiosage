@@ -123,4 +123,32 @@ export async function findOrCreateClient(email: string, name?: string, userId?: 
   return { id, name: displayName };
 }
 
+// Client timeline — aggregated events (messages + proposals + invoices)
+router.get('/:id/timeline', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const client = queryOne('SELECT id FROM clients WHERE id = ? AND user_id = ?', [req.params.id, userId]);
+  if (!client) return res.status(404).json({ ok: false, error: 'Client not found' });
+
+  const messages = queryAll(
+    `SELECT 'message' as type, id, subject as title, status, created_at FROM messages WHERE client_id = ? AND user_id = ? AND category != 'spam' ORDER BY created_at DESC LIMIT 20`,
+    [req.params.id, userId]
+  );
+  const proposals = queryAll(
+    `SELECT 'proposal' as type, id, title, status, created_at FROM proposals WHERE client_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10`,
+    [req.params.id, userId]
+  );
+  const invoices = queryAll(
+    `SELECT 'invoice' as type, id, description as title, status, amount, created_at FROM invoices WHERE client_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10`,
+    [req.params.id, userId]
+  );
+
+  // Merge and sort by created_at DESC
+  const timeline = [...(messages as any[]), ...(proposals as any[]), ...(invoices as any[])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 30);
+
+  res.json({ ok: true, timeline });
+});
+
 export { router as clientRoutes };
