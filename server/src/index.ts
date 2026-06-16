@@ -28,6 +28,7 @@ import { emailConnectRoutes } from './api/email-connect.js';
 import { proposalRoutes } from './api/proposals.js';
 import { portalRoutes } from './api/portal.js';
 import { calendarRoutes } from './api/calendar.js';
+import { galleryRoutes } from './api/galleries.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
@@ -94,6 +95,7 @@ app.use('/api/clients', authenticate, clientRoutes);
 app.use('/api/email', authenticate, emailConnectRoutes);
 app.use('/api/proposals', authenticate, proposalRoutes);
 app.use('/api/calendar', authenticate, calendarRoutes);
+app.use('/api/galleries', authenticate, galleryRoutes);
 
 // Serve client build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
