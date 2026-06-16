@@ -99,4 +99,34 @@ router.get('/me', authenticate, async (req, res, next) => {
   }
 });
 
+// POST /api/auth/forgot-password — send reset link
+router.post('/forgot-password', async (req, res) => {
+  await initDb();
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ ok: false, error: 'Email is required' });
+
+  const user = queryOne('SELECT id FROM users WHERE email = ?', [email]);
+  if (!user) return res.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
+
+  const token = randomUUID();
+  run('UPDATE users SET password_hash = ? WHERE id = ?', [token, (user as any).id]);
+  // In production: send email with link. For now: return token directly (dev mode).
+  res.json({ ok: true, message: 'Reset token generated', token: process.env.NODE_ENV === 'production' ? undefined : token });
+});
+
+// POST /api/auth/reset-password — reset with token
+router.post('/reset-password', async (req, res) => {
+  await initDb();
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) return res.status(400).json({ ok: false, error: 'Token and new password are required' });
+  if (newPassword.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+
+  const user = queryOne('SELECT id FROM users WHERE password_hash = ?', [token]) as any;
+  if (!user) return res.status(400).json({ ok: false, error: 'Invalid or expired reset token' });
+
+  const passwordHash = await hashPassword(newPassword);
+  run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, user.id]);
+  res.json({ ok: true, message: 'Password has been reset. You can now login.' });
+});
+
 export { router as authRoutes };

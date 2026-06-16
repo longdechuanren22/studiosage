@@ -34,6 +34,7 @@ export default function Clients() {
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', wechat_id: '', type: '', notes: '' });
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -45,10 +46,14 @@ export default function Clients() {
   }, []);
 
   const fetchClients = async () => {
-    try { const data = await api.get<Client[]>('/api/clients'); setClients(data); }
-    catch { /* network */ }
+    try {
+      const url = search ? `/api/clients?search=${encodeURIComponent(search)}` : '/api/clients';
+      const data = await api.get<Client[]>(url); setClients(data);
+    } catch { /* network */ }
     finally { setLoading(false); }
   };
+
+  useEffect(() => { fetchClients(); }, [search]);
 
   const openClient = async (id: string) => {
     setSelectedId(id);
@@ -208,12 +213,19 @@ export default function Clients() {
   // ── Client List View ──
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-.3px' }}>👥 {t('clients.title')}</h2>
-        <button onClick={() => setShowNewClient(true)}
-          style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#007AFF', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          {t('clients.newClient')}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flex: 1, maxWidth: 360 }}>
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search clients…"
+            style={{ flex: 1, padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,.1)', fontSize: 13, outline: 'none', background: '#fff' }}
+          />
+          <button onClick={() => setShowNewClient(true)}
+            style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#007AFF', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {t('clients.newClient')}
+          </button>
+        </div>
       </div>
 
       {/* New client modal */}

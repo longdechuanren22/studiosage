@@ -12,10 +12,20 @@ export function getDefaultUserId(): string {
   return user?.id || 'default';
 }
 
-// List all clients with summary stats
+// List all clients with summary stats (supports ?search= keyword)
 router.get('/', async (req, res) => {
   await initDb();
   const userId = req.userId!;
+  const search = (req.query.search as string || '').trim();
+
+  let whereClause = "WHERE c.user_id = ? AND c.status != 'archived'";
+  const params: any[] = [userId];
+
+  if (search) {
+    whereClause += " AND (c.name LIKE ? OR c.email LIKE ?)";
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
   const clients = queryAll(`
     SELECT c.*,
       (SELECT COUNT(*) FROM messages m WHERE m.client_id = c.id) as message_count,
@@ -25,9 +35,9 @@ router.get('/', async (req, res) => {
       (SELECT m.created_at FROM messages m WHERE m.client_id = c.id ORDER BY m.created_at DESC LIMIT 1) as last_message_at,
       (SELECT subject FROM messages m WHERE m.client_id = c.id ORDER BY m.created_at DESC LIMIT 1) as last_message_subject
     FROM clients c
-    WHERE c.user_id = ? AND c.status != 'archived'
+    ${whereClause}
     ORDER BY c.updated_at DESC
-  `, [userId]);
+  `, params);
   res.json(clients);
 });
 

@@ -92,6 +92,9 @@ export default function Login() {
               {t('auth.registerLink')}
             </Link>
           </p>
+          <p style={{ textAlign: 'center', marginTop: 8, fontSize: 12 }}>
+            <Link to="/forgot-password" style={{ color: '#AEAEB2', textDecoration: 'none' }}>Forgot password?</Link>
+          </p>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#AEAEB2' }}>
