@@ -1,6 +1,6 @@
 import { Router, type Router as RouterType } from 'express';
 import { initDb } from '../db/schema.js';
-import { run } from '../db/query.js';
+import { queryOne, run } from '../db/query.js';
 
 const router: RouterType = Router();
 
@@ -45,6 +45,14 @@ async function handleEvent(event: any) {
       if (invoiceId) {
         await initDb();
         run('UPDATE invoices SET status = ? WHERE id = ?', ['paid', invoiceId]);
+        // Notify photographer via SSE
+        const inv = queryOne('SELECT * FROM invoices WHERE id = ?', [invoiceId]) as any;
+        if (inv) {
+          try {
+            const { notifyInvoiceUpdated } = await import('../utils/events.js');
+            notifyInvoiceUpdated(inv.user_id, inv);
+          } catch {}
+        }
       }
       break;
     }

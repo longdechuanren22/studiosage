@@ -25,6 +25,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { lang, setLang } = useI18n();
   const avatarChar = user?.name?.[0] || 'E';
+  const avatarUrl = user?.email
+    ? `https://www.gravatar.com/avatar/${btoa(user.email.trim().toLowerCase()).slice(0, 32)}?d=404&s=60`
+    : null;
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -57,10 +61,15 @@ export default function Layout({ children }: { children: ReactNode }) {
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setMenuOpen(!menuOpen)} style={{
                   width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                  background: 'linear-gradient(135deg, #007AFF, #5856D6)',
+                  background: avatarUrl && !avatarFailed ? 'transparent' : 'linear-gradient(135deg, #007AFF, #5856D6)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 13, fontWeight: 700, padding: 0,
-                }}>{avatarChar}</button>
+                  color: '#fff', fontSize: 13, fontWeight: 700, padding: 0, overflow: 'hidden',
+                }}>
+                  {avatarUrl && !avatarFailed ? (
+                    <img src={avatarUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%' }}
+                      onError={() => setAvatarFailed(true)} />
+                  ) : avatarChar}
+                </button>
                 {menuOpen && (
                   <>
                     <div style={{ position: 'fixed', inset: 0, zIndex: 90 }} onClick={() => setMenuOpen(false)} />
