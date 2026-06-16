@@ -131,6 +131,19 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
             console.log(`[EmailWatcher] Extracted ${entities.length} entities: ${entities.map(e => e.type + '=' + e.value.slice(0, 30)).join(', ')}`);
           }
 
+          // ── Notify photographer of new client message ──
+          if (client && !isSpam) {
+            try {
+              const userEmail = (queryOne('SELECT email FROM users WHERE id = ?', [uid]) as any)?.email;
+              if (userEmail && userEmail !== 'default@local') {
+                const { sendReply } = await import('../adapters/email.js');
+                await sendReply(cfg, userEmail, `New message from ${client.name}`,
+                  `You have a new message from ${client.name} (${fromEmail || 'unknown'})\n\nSubject: ${msg.subject}\n\n${cleanBody.slice(0, 300)}\n\nView in StudioSage: /sage/clients?open=${client.id}`
+                ).catch(() => {}); // Silent fail — notification is non-critical
+              }
+            } catch { /* Best effort */ }
+          }
+
           // ── Auto-send AI reply via SMTP ──
           if (replyText) {
             try {

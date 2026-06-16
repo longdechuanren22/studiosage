@@ -10,6 +10,7 @@ interface DashboardData {
   pipeline: Record<string, number>;
   recentActivity: { client_id: string; client_name: string; stage: string; type: string; pending: number; needsAction: boolean; actionLabel: string; pending_proposals: number; unpaid_invoices: number; last_subject: string; last_message_at: string; last_msg_status: string; client_updated_at: string; }[];
   insights: { type: string; value: string; raw_text: string; created_at: string; client_id: string; client_name: string; }[];
+  analytics?: { monthlyRevenue: { month: string; total: number; count: number }[]; conversion: { rate: number; totalInquiries: number; totalBooked: number }; avgResponseHours: number | null; messageVolume: { month: string; count: number }[] };
 }
 
 const pipelineStages = ['inquiry', 'engaged', 'booked', 'shooting', 'production', 'delivered'];
@@ -55,7 +56,13 @@ export default function Dashboard() {
   }, []);
 
   const fetchData = async () => {
-    try { const res = await api.get<DashboardData>('/api/dashboard'); setData(res); } catch {}
+    try {
+      const [dash, an] = await Promise.all([
+        api.get<DashboardData>('/api/dashboard'),
+        api.get<any>('/api/dashboard/analytics').catch(() => null),
+      ]);
+      setData(an ? { ...dash, analytics: an } : dash);
+    } catch {}
     setLoading(false);
   };
 
@@ -169,6 +176,26 @@ export default function Dashboard() {
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Analytics snapshot */}
+      {d && d.analytics && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.04)', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#007AFF' }}>{d.analytics.conversion.rate}%</div>
+            <div style={{ fontSize: 11, color: '#86868B' }}>Inquiry→Booked ({d.analytics.conversion.totalBooked}/{d.analytics.conversion.totalInquiries})</div>
+          </div>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.04)', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#34C759' }}>{d.analytics.avgResponseHours ? `${d.analytics.avgResponseHours}h` : '—'}</div>
+            <div style={{ fontSize: 11, color: '#86868B' }}>Avg Response Time</div>
+          </div>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.04)', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#AF52DE' }}>
+              ${d.analytics.monthlyRevenue.slice(-3).reduce((s: number, m: any) => s + (m.total || 0), 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, color: '#86868B' }}>Last 3 Months Revenue</div>
           </div>
         </div>
       )}

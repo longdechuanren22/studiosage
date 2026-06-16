@@ -26,7 +26,7 @@ interface Invoice {
 export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<{ messages: Message[]; invoices: Invoice[] } | null>(null);
+  const [detail, setDetail] = useState<{ messages: Message[]; invoices: Invoice[]; timeline?: any[] } | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'active'>('all');
   const [sending, setSending] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -60,8 +60,11 @@ export default function Clients() {
     setSelectedId(id);
     setSearchParams({ open: id });
     try {
-      const data = await api.get<any>(`/api/clients/${id}`);
-      setDetail({ messages: data.messages || [], invoices: data.invoices || [] });
+      const [data, tl] = await Promise.all([
+        api.get<any>(`/api/clients/${id}`),
+        api.get<any>(`/api/clients/${id}/timeline`).catch(() => ({ timeline: [] })),
+      ]);
+      setDetail({ messages: data.messages || [], invoices: data.invoices || [], timeline: tl.timeline || [] });
     } catch { /* offline */ }
   };
 
@@ -133,6 +136,29 @@ export default function Clients() {
             <Stat label={t('clients.stats.unpaid')} value={client.unpaid_invoice_count} color={client.unpaid_invoice_count > 0 ? '#FF9500' : undefined} />
           </div>
         </div>
+
+        {/* Timeline — aggregated events */}
+        {detail.timeline && detail.timeline.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#86868B', marginBottom: 8 }}>⏱ Timeline</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '2px solid rgba(0,122,255,.15)', paddingLeft: 14 }}>
+              {detail.timeline.slice(0, 15).map((event: any, i: number) => {
+                const icon = event.type === 'message' ? '💬' : event.type === 'proposal' ? '📋' : '💰';
+                const color = event.type === 'message' ? '#007AFF' : event.type === 'proposal' ? '#AF52DE' : '#34C759';
+                return (
+                  <div key={i} style={{ fontSize: 12, padding: '4px 0', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <span style={{ color, flexShrink: 0 }}>{icon}</span>
+                    <div>
+                      <span style={{ fontWeight: 600 }}>{event.title || event.type}</span>
+                      <span style={{ color: '#AEAEB2', marginLeft: 6 }}>{formatTime(event.created_at)}</span>
+                      {event.amount && <span style={{ color: '#34C759', marginLeft: 6, fontWeight: 600 }}>${event.amount}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div style={{ marginBottom: 12 }}>
