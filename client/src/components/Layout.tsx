@@ -21,6 +21,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [demo, setDemo] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem('studiosage_dark') === '1');
+  const [offline, setOffline] = useState(!navigator.onLine);
   const { user, logout } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
@@ -44,6 +45,11 @@ export default function Layout({ children }: { children: ReactNode }) {
     document.body.classList.toggle('dark', next);
   };
   useEffect(() => { document.body.classList.toggle('dark', dark); }, []);
+  useEffect(() => {
+    const go = () => setOffline(false); const gone = () => setOffline(true);
+    window.addEventListener('online', go); window.addEventListener('offline', gone);
+    return () => { window.removeEventListener('online', go); window.removeEventListener('offline', gone); };
+  }, []);
 
   return (
     <DemoContext.Provider value={{ demo, toggleDemo: () => setDemo(!demo) }}>

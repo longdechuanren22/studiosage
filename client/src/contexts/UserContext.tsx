@@ -57,6 +57,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('studiosage_token', data.token);
+    localStorage.setItem('studiosage_token_ts', String(Date.now()));
   }, []);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
@@ -70,6 +71,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('studiosage_token', data.token);
+    localStorage.setItem('studiosage_token_ts', String(Date.now()));
   }, []);
 
   const logout = useCallback(() => {
