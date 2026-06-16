@@ -164,7 +164,9 @@ Output valid JSON only (no markdown):
     // Fallback: template-based proposal from chat context
     const chatText = messages.map(m => m.subject + ' ' + (m.body || '').slice(0, 200)).join(' ');
     const pkgType = client.type || 'wedding';
-    const basePrice = pkgType === 'wedding' ? 3500 : pkgType === 'portrait' ? 450 : pkgType === 'event' ? 1800 : 2000;
+    // Real market prices from US/UK/AU photographer data
+    const priceMap: Record<string, number> = { wedding: 3500, portrait: 400, headshot: 250, child: 400, newborn: 500, birthday: 500, maternity: 400, event: 1200, graduation: 300, pet: 250, concert: 600, sports: 500, commercial: 1500, food: 500, fashion: 1800, realestate: 200, boudoir: 500, aerial: 500, elopement: 1500 };
+    const basePrice = priceMap[pkgType] || 2000;
     const title = `${client.name} ${pkgType.charAt(0).toUpperCase() + pkgType.slice(1)} Photography`;
 
     const multiPackages = [
