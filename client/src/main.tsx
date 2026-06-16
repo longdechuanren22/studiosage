@@ -21,6 +21,18 @@ window.addEventListener('unhandledrejection', (e) => {
   console.error('[UnhandledRejection]', e.reason?.message || e.reason);
 });
 
+// Global keyboard shortcuts
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+  const key = (e.metaKey || e.ctrlKey) ? `Ctrl+${e.key}` : e.key;
+  switch (key) {
+    case 'g': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/'; } break;
+    case 'c': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/clients'; } break;
+    case 'i': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/invoices'; } break;
+    case 'p': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/proposals'; } break;
+  }
+});
+
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
 

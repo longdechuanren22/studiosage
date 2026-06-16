@@ -216,4 +216,24 @@ router.get('/:id/pdf', async (req, res) => {
   }
 });
 
+// Export invoices as CSV
+router.get('/export/csv', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const invoices = queryAll(
+    `SELECT client_name, client_email, amount, currency, description, status, payment_schedule, stripe_payment_link, created_at
+     FROM invoices WHERE user_id = ? ORDER BY created_at DESC`,
+    [userId]
+  ) as any[];
+
+  const header = 'Client,Email,Amount,Currency,Description,Status,Schedule,PaymentLink,Created\n';
+  const rows = invoices.map(i =>
+    `"${(i.client_name || '').replace(/"/g, '""')}","${(i.client_email || '').replace(/"/g, '""')}",${i.amount},"${i.currency}","${(i.description || '').replace(/"/g, '""')}","${i.status}","${i.payment_schedule}","${i.stripe_payment_link || ''}","${i.created_at}"`
+  ).join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="studiosage-invoices.csv"');
+  res.send('﻿' + header + rows);
+});
+
 export { router as invoiceRoutes };
