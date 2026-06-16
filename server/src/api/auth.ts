@@ -40,11 +40,19 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
     );
 
     const token = signToken({ userId: id, email });
-    res.status(201).json({
-      ok: true,
-      user: { id, email, name, plan: 'trial' },
-      token,
-    });
+    res.status(201).json({ ok: true, user: { id, email, name, plan: 'trial' }, token });
+
+    // Send welcome email (best effort, non-blocking)
+    try {
+      const { sendReply } = await import('../adapters/email.js');
+      const cfg = (queryOne("SELECT * FROM tool_connections WHERE user_id = ? AND tool_id = 'email_imap' AND status = 'active'", [id]) as any);
+      if (cfg) {
+        const storedCfg = JSON.parse(cfg.access_token_encrypted || '{}');
+        await sendReply(storedCfg, email, 'Welcome to StudioSage! 🎉',
+          `Hi ${name},\n\nWelcome to StudioSage! Your AI photography assistant is ready.\n\nHere's what you can do:\n• Connect your work email — AI will auto-classify client messages and draft replies\n• Create proposals with one click — share with clients, they accept online\n• Send invoices with Stripe payment links\n• Track everything on your dashboard\n\nYour 14-day free trial starts now. No credit card required.\n\nQuestions? Just reply to this email.\n\n— The StudioSage Team`
+        );
+      }
+    } catch { /* Best effort — welcome email is non-critical */ }
   } catch (err) {
     next(err);
   }

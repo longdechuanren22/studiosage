@@ -18,6 +18,8 @@ const pipelineStages = ['inquiry', 'engaged', 'booked', 'shooting', 'production'
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[] | null>(null);
   const navigate = useNavigate();
   const { user } = useUser();
   const { demo } = useDemo();
