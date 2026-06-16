@@ -128,14 +128,20 @@ interface EmailMessage {
   date: Date;
 }
 
-/** Fetch recent inbox messages */
+/** Fetch recent inbox messages — with overall timeout protection */
 export async function fetchRecentMessages(cfg: EmailConfig, limit = 10): Promise<EmailMessage[]> {
+  const IMAP_TIMEOUT = 30000; // 30s hard timeout
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      try { imap.destroy(); } catch {}
+      reject(new Error('IMAP connection timed out after 30s'));
+    }, IMAP_TIMEOUT);
+
     const imap = new Imap({
       user: cfg.email, password: cfg.password,
       host: cfg.imapHost, port: cfg.imapPort, tls: cfg.imapTls,
       tlsOptions: { rejectUnauthorized: false },
-      connTimeout: 15000,
+      connTimeout: 15000, authTimeout: 15000,
     });
 
     const messages: EmailMessage[] = [];
@@ -143,7 +149,7 @@ export async function fetchRecentMessages(cfg: EmailConfig, limit = 10): Promise
       imap.openBox('INBOX', false, (err: Error) => {
         if (err) { imap.end(); return reject(err); }
         imap.search(['ALL'], (err: Error | null, results: number[]) => {
-          if (err || !results.length) { imap.end(); return resolve([]); }
+          if (err || !results.length) { clearTimeout(timeout); imap.end(); return resolve([]); }
           const latest = results.slice(-limit);
           const fetch = imap.fetch(latest, { bodies: '', struct: true });
           fetch.on('message', (msg: Imap.ImapMessage) => {
@@ -165,12 +171,12 @@ export async function fetchRecentMessages(cfg: EmailConfig, limit = 10): Promise
               });
             });
           });
-          fetch.once('error', (err: Error) => reject(err));
-          fetch.once('end', () => { imap.end(); resolve(messages); });
+          fetch.once('error', (err: Error) => { clearTimeout(timeout); reject(err); });
+          fetch.once('end', () => { clearTimeout(timeout); imap.end(); resolve(messages); });
         });
       });
     });
-    imap.once('error', (err: Error) => reject(err));
+    imap.once('error', (err: Error) => { clearTimeout(timeout); reject(err); });
     imap.connect();
   });
 }
