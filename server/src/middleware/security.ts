@@ -15,7 +15,7 @@ export const securityHeaders = helmet({
 
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, slow down.' },
@@ -25,4 +25,13 @@ export const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
   message: { error: 'AI rate limit. Try again shortly.' },
+});
+
+// Strict rate limit for auth endpoints (prevent brute force)
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 10 : 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'Too many attempts. Try again in 15 minutes.' },
 });

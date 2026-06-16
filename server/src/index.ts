@@ -23,7 +23,7 @@ import { healthRoutes } from './api/health.js';
 import { demoRoutes } from './api/demo.js';
 import { deployRoutes } from './api/deploy.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
-import { securityHeaders, apiLimiter } from './middleware/security.js';
+import { securityHeaders, apiLimiter, authLimiter } from './middleware/security.js';
 import { emailConnectRoutes } from './api/email-connect.js';
 import { proposalRoutes } from './api/proposals.js';
 import { portalRoutes } from './api/portal.js';
@@ -65,7 +65,7 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json({ limit: '1mb' }));
 
 // ── Public routes (no auth required) ──
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/oauth', oauthRoutes);
