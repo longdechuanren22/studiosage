@@ -130,7 +130,7 @@ ${chatSummary.slice(0, 3000)}
 Output valid JSON only (no markdown):
 {
   "title": "Proposal title (e.g., 'Sarah & Mike Wedding Photography')",
-  "packages": [{"name": "Package name", "price": 4500, "includes": ["item 1", "item 2"]}],
+  "packages": [{"name": "Premium", "price": 4500, "includes": ["item1","item2"]}, {"name": "Standard", "price": 2800, "includes": ["item1"]}, {"name": "Basic", "price": 1200, "includes": ["item1"]}],
   "pricing": {"Service A": 2500, "Service B": 1000},
   "contractTerms": "1. 50% retainer confirms the date, non-refundable.\\n2. 25% due on shoot day.\\n3. 25% due before delivery."
 }`;
@@ -164,8 +164,16 @@ Output valid JSON only (no markdown):
     // Fallback: template-based proposal from chat context
     const chatText = messages.map(m => m.subject + ' ' + (m.body || '').slice(0, 200)).join(' ');
     const pkgType = client.type || 'wedding';
-    const pkgPrice = pkgType === 'wedding' ? 3500 : pkgType === 'portrait' ? 450 : pkgType === 'event' ? 1800 : 2000;
+    const basePrice = pkgType === 'wedding' ? 3500 : pkgType === 'portrait' ? 450 : pkgType === 'event' ? 1800 : 2000;
     const title = `${client.name} ${pkgType.charAt(0).toUpperCase() + pkgType.slice(1)} Photography`;
+
+    const multiPackages = [
+      { name: 'Premium', price: basePrice, includes: ['Full day coverage', '2 photographers', 'Album', 'All edited images', 'Online gallery'] },
+      { name: 'Standard', price: Math.round(basePrice * 0.7), includes: ['6 hours coverage', '1 photographer', 'Edited images', 'Online gallery'] },
+      { name: 'Basic', price: Math.round(basePrice * 0.4), includes: ['2 hours coverage', 'Edited images', 'Online gallery'] },
+    ];
+    const pricing: Record<string, number> = {};
+    multiPackages.forEach(p => { pricing[p.name] = p.price; });
 
     const id = randomUUID();
     const shareToken = randomUUID().replace(/-/g, '');
@@ -173,16 +181,15 @@ Output valid JSON only (no markdown):
       `INSERT INTO proposals (id, user_id, client_id, title, packages, pricing, contract_terms, share_token, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
       [id, userId, clientId, title,
-       JSON.stringify([{ name: `${pkgType.charAt(0).toUpperCase() + pkgType.slice(1)} Package`, price: pkgPrice, includes: ['Full coverage', 'Edited images', 'Online gallery'] }]),
-       JSON.stringify({ [pkgType]: pkgPrice }),
+       JSON.stringify(multiPackages), JSON.stringify(pricing),
        '1. 50% retainer non-refundable.\n2. 25% on shoot day.\n3. 25% before delivery.',
        shareToken]
     );
 
     return res.status(201).json({
       id, shareToken, title, generated: false,
-      packages: [{ name: `${pkgType} Package`, price: pkgPrice }],
-      pricing: { [pkgType]: pkgPrice },
+      packages: multiPackages,
+      pricing,
       contractTerms: '1. 50% retainer non-refundable.\n2. 25% on shoot day.\n3. 25% before delivery.',
     });
   }
