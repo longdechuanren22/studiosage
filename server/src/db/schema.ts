@@ -3,14 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DB_PATH = path.join(process.cwd(), 'data', 'studiosage.db');
+const DB_BAK_PATH = path.join(process.cwd(), 'data', 'studiosage.db.bak');
 
 let _db: SqlJsDatabase | null = null;
 let _initPromise: Promise<SqlJsDatabase> | null = null;
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _periodicTimer: ReturnType<typeof setInterval> | null = null;
 let _dirty = false;
+let _saveLock = false;
 
-/** Initialize the database (idempotent — safe to call multiple times) */
+/** Initialize the database — with crash recovery */
 export async function initDb(): Promise<SqlJsDatabase> {
   if (_db) return _db;
   if (_initPromise) return _initPromise;
@@ -19,9 +20,19 @@ export async function initDb(): Promise<SqlJsDatabase> {
     const SQL = await initSqlJs();
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
+    // Try loading main DB, fall back to backup, or create fresh
     if (fs.existsSync(DB_PATH)) {
-      const buffer = fs.readFileSync(DB_PATH);
-      _db = new SQL.Database(buffer);
+      try {
+        _db = new SQL.Database(fs.readFileSync(DB_PATH));
+      } catch {
+        console.error(`[DB] Primary DB corrupted, trying backup...`);
+        try {
+          _db = new SQL.Database(fs.readFileSync(DB_BAK_PATH));
+          console.log(`[DB] Restored from backup`);
+        } catch {
+          _db = new SQL.Database();
+        }
+      }
     } else {
       _db = new SQL.Database();
     }
@@ -47,32 +58,40 @@ export function isDbReady(): boolean {
   return _db !== null;
 }
 
-/** Mark DB dirty and schedule a flush to disk */
+/** Mark DB dirty — write-through: save immediately, no debounce */
 export function markDirty() {
   _dirty = true;
-  if (_saveTimer) clearTimeout(_saveTimer);
-  // Debounced save: 500ms after last write, or immediate if many writes
-  _saveTimer = setTimeout(() => saveDb(), 500);
+  saveDb();
 }
 
-/** Persist the in-memory database to disk immediately */
+/** Persist database atomically — write to temp file, rename, then backup */
 export function saveDb() {
-  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-  if (!_db || !_dirty) return;
+  if (!_db || !_dirty || _saveLock) return;
+  _saveLock = true;
   try {
     const data = _db.export();
+    const tmp = DB_PATH + '.tmp';
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fs.writeFileSync(DB_PATH, data);
+
+    // Atomic: write to .tmp, rename over real file
+    fs.writeFileSync(tmp, data);
+    if (fs.existsSync(DB_PATH)) {
+      fs.renameSync(DB_PATH, DB_BAK_PATH); // old → backup
+    }
+    fs.renameSync(tmp, DB_PATH); // new → main
+
     _dirty = false;
   } catch (err) {
     console.error('[DB] save failed:', (err as Error).message);
+  } finally {
+    _saveLock = false;
   }
 }
 
-/** Force save regardless of dirty flag (used on shutdown) */
+/** Force save and close (used on shutdown) */
 export function closeDb() {
   if (_periodicTimer) { clearInterval(_periodicTimer); _periodicTimer = null; }
-  saveDb();
+  if (_dirty) saveDb();
   try { _db?.close(); } catch { /* ignore */ }
   _db = null;
   _initPromise = null;

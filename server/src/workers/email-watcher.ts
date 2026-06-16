@@ -145,12 +145,16 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
         console.log(`[EmailWatcher] ${newCount} new, ${spamCount} spam`);
       }
     } catch (err) {
-      console.error('[EmailWatcher]', (err as Error).message);
+      console.error('[EmailWatcher] Poll failed, will retry:', (err as Error).message);
+      // Don't crash — the next interval will retry
     }
   };
 
   await poll();
-  setInterval(poll, intervalMs);
+  const timer = setInterval(poll, intervalMs);
+
+  // Keep Node process alive (unref would let process exit)
+  timer.unref?.();
 }
 
 // Extract email address from "Name <email>" format

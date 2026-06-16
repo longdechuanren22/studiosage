@@ -24,19 +24,34 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-
-    // SSE real-time stream — replaces polling
     const token = localStorage.getItem('studiosage_token');
     if (!token) return;
-    const es = new EventSource(`/api/dashboard/stream?token=${encodeURIComponent(token)}`);
-    es.onmessage = () => fetchData(); // fallback
-    es.addEventListener('message:new', () => fetchData());
-    es.addEventListener('message:replied', () => fetchData());
-    es.addEventListener('invoice:updated', () => fetchData());
-    es.addEventListener('client:updated', () => fetchData());
-    es.onerror = () => { /* SSE disconnected, will fall back to manual refresh */ };
 
-    return () => { es.close(); };
+    let es: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectDelay = 1000;
+
+    const connectSSE = () => {
+      es = new EventSource(`/api/dashboard/stream?token=${encodeURIComponent(token!)}`);
+      es.onmessage = () => fetchData();
+      es.addEventListener('message:new', () => fetchData());
+      es.addEventListener('message:replied', () => fetchData());
+      es.addEventListener('invoice:updated', () => fetchData());
+      es.addEventListener('client:updated', () => fetchData());
+      es.onerror = () => {
+        es.close();
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000); // 1s→2s→4s...max 30s
+        reconnectTimer = setTimeout(connectSSE, reconnectDelay);
+      };
+      es.onopen = () => { reconnectDelay = 1000; }; // Reset on success
+    };
+
+    connectSSE();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      try { es.close(); } catch {}
+    };
   }, []);
 
   const fetchData = async () => {
