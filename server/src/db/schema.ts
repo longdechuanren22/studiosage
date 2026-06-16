@@ -1,45 +1,48 @@
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
-import fs from 'node:fs';
+// Database layer — better-sqlite3 (persistent, crash-safe)
+import Database from 'better-sqlite3';
 import path from 'node:path';
+import fs from 'node:fs';
 
 const DB_PATH = path.join(process.cwd(), 'data', 'studiosage.db');
 const DB_BAK_PATH = path.join(process.cwd(), 'data', 'studiosage.db.bak');
 
-let _db: SqlJsDatabase | null = null;
-let _initPromise: Promise<SqlJsDatabase> | null = null;
-let _periodicTimer: ReturnType<typeof setInterval> | null = null;
-let _dirty = false;
-let _saveLock = false;
+let _db: Database.Database | null = null;
+let _initPromise: Promise<Database.Database> | null = null;
 
-/** Initialize the database — with crash recovery */
-export async function initDb(): Promise<SqlJsDatabase> {
+export async function initDb(): Promise<Database.Database> {
   if (_db) return _db;
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    const SQL = await initSqlJs();
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-    // Try loading main DB, fall back to backup, or create fresh
+    // Crash recovery: try main DB, then backup, then fresh
     if (fs.existsSync(DB_PATH)) {
       try {
-        _db = new SQL.Database(fs.readFileSync(DB_PATH));
+        _db = new Database(DB_PATH);
+        _db.pragma('journal_mode = WAL');
+        _db.pragma('foreign_keys = ON');
       } catch {
-        console.error(`[DB] Primary DB corrupted, trying backup...`);
+        console.error('[DB] Primary DB corrupted, trying backup...');
         try {
-          _db = new SQL.Database(fs.readFileSync(DB_BAK_PATH));
-          console.log(`[DB] Restored from backup`);
+          fs.copyFileSync(DB_BAK_PATH, DB_PATH);
+          _db = new Database(DB_PATH);
+          _db.pragma('journal_mode = WAL');
+          _db.pragma('foreign_keys = ON');
+          console.log('[DB] Restored from backup');
         } catch {
-          _db = new SQL.Database();
+          _db = new Database(DB_PATH);
+          _db.pragma('journal_mode = WAL');
+          _db.pragma('foreign_keys = ON');
         }
       }
     } else {
-      _db = new SQL.Database();
+      _db = new Database(DB_PATH);
+      _db.pragma('journal_mode = WAL');
+      _db.pragma('foreign_keys = ON');
     }
 
-    _db.run('PRAGMA foreign_keys = ON');
     runMigrations(_db);
-    _startPeriodicSave();
     _setupShutdownHooks();
     return _db;
   })();
@@ -47,183 +50,80 @@ export async function initDb(): Promise<SqlJsDatabase> {
   return _initPromise;
 }
 
-/** Get the database instance (throws if not initialized) */
-export function getDb(): SqlJsDatabase {
-  if (!_db) throw new Error('Database not initialized. Call initDb() first.');
+export function getDb(): Database.Database {
+  if (!_db) throw new Error('Database not initialized');
   return _db;
 }
 
-/** Check if DB is ready without throwing */
-export function isDbReady(): boolean {
-  return _db !== null;
+export function isDbReady(): boolean { return _db !== null; }
+
+// Backup before each write (lightweight: just copy the WAL-backed file)
+export function backupDb() {
+  if (!_db) return;
+  try { fs.copyFileSync(DB_PATH, DB_BAK_PATH); } catch {}
 }
 
-/** Mark DB dirty — write-through: save immediately, no debounce */
-export function markDirty() {
-  _dirty = true;
-  saveDb();
-}
-
-/** Persist database atomically — write to temp file, rename, then backup */
-export function saveDb() {
-  if (!_db || !_dirty || _saveLock) return;
-  _saveLock = true;
-  try {
-    const data = _db.export();
-    const tmp = DB_PATH + '.tmp';
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-    // Atomic: write to .tmp, rename over real file
-    fs.writeFileSync(tmp, data);
-    if (fs.existsSync(DB_PATH)) {
-      fs.renameSync(DB_PATH, DB_BAK_PATH); // old → backup
-    }
-    fs.renameSync(tmp, DB_PATH); // new → main
-
-    _dirty = false;
-  } catch (err) {
-    console.error('[DB] save failed:', (err as Error).message);
-  } finally {
-    _saveLock = false;
-  }
-}
-
-/** Force save and close (used on shutdown) */
 export function closeDb() {
-  if (_periodicTimer) { clearInterval(_periodicTimer); _periodicTimer = null; }
-  if (_dirty) saveDb();
-  try { _db?.close(); } catch { /* ignore */ }
+  try { _db?.close(); } catch {}
   _db = null;
   _initPromise = null;
-  _dirty = false;
 }
 
-// ── internal helpers ──
+// ── Migrations ──
 
-function _startPeriodicSave() {
-  // Save every 30 seconds as a safety net
-  _periodicTimer = setInterval(() => {
-    if (_dirty) saveDb();
-  }, 30_000);
-}
-
-function _setupShutdownHooks() {
-  const shutdown = (signal: string) => {
-    console.log(`[DB] ${signal} received, flushing...`);
-    closeDb();
-    process.exit(0);
-  };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  // Save on uncaught errors (best-effort)
-  process.on('uncaughtException', (err) => {
-    console.error('[DB] Uncaught exception, attempting save:', err.message);
-    saveDb();
-    process.exit(1);
-  });
-}
-
-function runMigrations(db: SqlJsDatabase) {
-  db.run(`
+function runMigrations(db: Database.Database) {
+  db.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      google_id TEXT UNIQUE,
-      plan TEXT DEFAULT 'trial',
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  // Ensure default user exists (required for FK constraints)
-  db.run(`INSERT OR IGNORE INTO users (id, email, name, plan) VALUES ('default', 'default@local', '默认用户', 'trial')`);
-  db.run(`
+      id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, google_id TEXT UNIQUE,
+      plan TEXT DEFAULT 'trial', password_hash TEXT, created_at TEXT DEFAULT (datetime('now'))
+    );
+    INSERT OR IGNORE INTO users (id, email, name, plan) VALUES ('default', 'default@local', 'Default', 'trial');
+
     CREATE TABLE IF NOT EXISTS tool_connections (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      tool_id TEXT NOT NULL,
-      access_token_encrypted TEXT,
-      refresh_token_encrypted TEXT,
-      expires_at TEXT,
-      status TEXT DEFAULT 'active',
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  db.run(`
+      id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), tool_id TEXT NOT NULL,
+      access_token_encrypted TEXT, refresh_token_encrypted TEXT, expires_at TEXT,
+      status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS clients (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      email TEXT,
-      name TEXT,
-      phone TEXT DEFAULT '',
-      wechat_id TEXT DEFAULT '',
-      stage TEXT NOT NULL DEFAULT 'inquiry',
-      type TEXT DEFAULT '',
-      shoot_date TEXT,
-      package_type TEXT,
-      source TEXT DEFAULT 'manual',
-      notes TEXT DEFAULT '',
-      pixieset_gallery_id TEXT,
-      stripe_customer_id TEXT,
-      metadata TEXT DEFAULT '{}',
-      status TEXT DEFAULT 'active',
-      updated_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  db.run(`
+      id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), email TEXT, name TEXT,
+      phone TEXT DEFAULT '', wechat_id TEXT DEFAULT '', stage TEXT NOT NULL DEFAULT 'inquiry',
+      type TEXT DEFAULT '', shoot_date TEXT, package_type TEXT, source TEXT DEFAULT 'manual',
+      notes TEXT DEFAULT '', pixieset_gallery_id TEXT, stripe_customer_id TEXT,
+      metadata TEXT DEFAULT '{}', status TEXT DEFAULT 'active', updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      client_id TEXT REFERENCES clients(id),
-      from_address TEXT,
-      subject TEXT,
-      body TEXT,
-      category TEXT DEFAULT 'normal',
-      status TEXT DEFAULT 'pending',
-      ai_reply TEXT,
-      channel TEXT DEFAULT 'email',
-      thread_id TEXT,
-      stage_at_time TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  db.run(`
+      id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), client_id TEXT REFERENCES clients(id),
+      from_address TEXT, subject TEXT, body TEXT, category TEXT DEFAULT 'normal',
+      status TEXT DEFAULT 'pending', ai_reply TEXT, channel TEXT DEFAULT 'email',
+      thread_id TEXT, stage_at_time TEXT, imap_uid TEXT, created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS invoices (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      client_id TEXT REFERENCES clients(id),
-      client_name TEXT,
-      client_email TEXT,
-      amount REAL,
-      currency TEXT DEFAULT 'USD',
-      description TEXT,
-      items TEXT DEFAULT '[]',
-      payment_schedule TEXT DEFAULT 'single',
-      retainer_type TEXT,
-      status TEXT DEFAULT 'draft',
-      stripe_payment_link TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
+      id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), client_id TEXT REFERENCES clients(id),
+      client_name TEXT, client_email TEXT, amount REAL, currency TEXT DEFAULT 'USD',
+      description TEXT, items TEXT DEFAULT '[]', payment_schedule TEXT DEFAULT 'single',
+      retainer_type TEXT, status TEXT DEFAULT 'draft', stripe_payment_link TEXT, created_at TEXT DEFAULT (datetime('now'))
+    );
 
-  db.run(`
     CREATE TABLE IF NOT EXISTS proposals (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      client_id TEXT REFERENCES clients(id),
-      title TEXT NOT NULL,
-      packages TEXT DEFAULT '[]',
-      pricing TEXT DEFAULT '{}',
-      contract_terms TEXT DEFAULT '',
-      share_token TEXT UNIQUE,
-      status TEXT DEFAULT 'draft',
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    )
+      id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), client_id TEXT REFERENCES clients(id),
+      title TEXT NOT NULL, packages TEXT DEFAULT '[]', pricing TEXT DEFAULT '{}',
+      contract_terms TEXT DEFAULT '', share_token TEXT UNIQUE, status TEXT DEFAULT 'draft',
+      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS client_insights (
+      id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), client_id TEXT REFERENCES clients(id),
+      message_id TEXT REFERENCES messages(id), type TEXT NOT NULL, value TEXT NOT NULL,
+      raw_text TEXT, created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
-  // Migrate existing tables (add columns if missing)
+  // Add columns that may be missing on older DBs
   const addCol = (table: string, col: string, type: string) => {
-    try { db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch (_) { /* already exists */ }
+    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch {}
   };
   addCol('clients', 'phone', "TEXT DEFAULT ''");
   addCol('clients', 'wechat_id', "TEXT DEFAULT ''");
@@ -236,39 +136,14 @@ function runMigrations(db: SqlJsDatabase) {
   addCol('messages', 'imap_uid', 'TEXT');
   addCol('users', 'password_hash', 'TEXT');
 
-  // Client insights table — extracted key info from conversations
-  db.run(`
-    CREATE TABLE IF NOT EXISTS client_insights (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      client_id TEXT REFERENCES clients(id),
-      message_id TEXT REFERENCES messages(id),
-      type TEXT NOT NULL,
-      value TEXT NOT NULL,
-      raw_text TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_messages_imap_uid ON messages(user_id, imap_uid)'); } catch {}
 
-  // Add UNIQUE constraint on tool_connections (safe: ALTER TABLE ADD CONSTRAINT fails silently if exists)
-  try { db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch (_) { }
-  // Fast dedup lookup for email watcher
-  try { db.run('CREATE INDEX IF NOT EXISTS idx_messages_imap_uid ON messages(user_id, imap_uid)'); } catch (_) { }
+  backupDb();
+}
 
-  // One-time cleanup: remove old messages without imap_uid (pre-dedup-fix era)
-  // The email watcher will re-fetch and store them correctly with imap_uid
-  try {
-    const result = db.exec(`SELECT COUNT(*) as cnt FROM messages WHERE channel = 'email' AND imap_uid IS NULL`);
-    if (result.length > 0 && result[0].values.length > 0) {
-      const count = result[0].values[0][0] as number;
-      if (count > 0) {
-        db.run(`DELETE FROM messages WHERE channel = 'email' AND imap_uid IS NULL`);
-        console.log(`[DB] Cleaned up ${count} old messages — will re-fetch with dedup`);
-      }
-    }
-  } catch (_) { /* Silent — migration only */ }
-
-  // Initial save after migrations
-  const data = db.export();
-  fs.writeFileSync(DB_PATH, data);
+function _setupShutdownHooks() {
+  const shutdown = () => { backupDb(); closeDb(); process.exit(0); };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
