@@ -3,7 +3,6 @@ import { useDemo } from '../components/Layout';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
-import { t, tf } from '../i18n';
 
 interface Invoice {
   id: string; client_name: string; client_email: string;
@@ -39,8 +38,6 @@ export default function Invoices() {
   };
 
   useEffect(() => { fetchInvoices(); }, [demo, token]);
-
-  // Poll every 30s in non-demo mode
   useEffect(() => {
     if (demo) return;
     const t = setInterval(fetchInvoices, 30000);
@@ -49,77 +46,52 @@ export default function Invoices() {
 
   const handleSend = async (inv: Invoice) => {
     if (demo) {
-      toast('演示模式：模拟发送成功！Stripe 支付链接已生成', 'success');
+      toast('Demo: Invoice sent! Payment link simulated', 'success');
       setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'sent', stripe_payment_link: 'https://buy.stripe.com/test_demo_sent' } : i));
       return;
     }
     setSendingId(inv.id);
     try {
       const data = await api.post<{ ok: boolean; invoice: Invoice }>(`/api/invoices/${inv.id}/send`);
-      toast('发票已发送！支付链接已生成', 'success');
-      if (data.invoice) {
-        setInvoices(prev => prev.map(i => i.id === inv.id ? data.invoice : i));
-      } else {
-        fetchInvoices();
-      }
+      toast('Invoice sent! Payment link generated', 'success');
+      if (data.invoice) setInvoices(prev => prev.map(i => i.id === inv.id ? data.invoice : i));
+      else fetchInvoices();
     } catch (err: any) {
-      toast(err.message || '发送失败', 'error');
-    } finally {
-      setSendingId(null);
-    }
+      toast(err.message || 'Send failed', 'error');
+    } finally { setSendingId(null); }
   };
 
   const handleDelete = async (inv: Invoice) => {
-    if (demo) {
-      setInvoices(prev => prev.filter(i => i.id !== inv.id));
-      toast('已删除', 'info');
-      return;
-    }
-    try {
-      await api.del(`/api/invoices/${inv.id}`);
-      toast('发票已删除', 'info');
-      fetchInvoices();
-      setSelectedId(null);
-    } catch (err: any) {
-      toast(err.message || '删除失败', 'error');
-    }
+    if (demo) { setInvoices(prev => prev.filter(i => i.id !== inv.id)); toast('Deleted', 'info'); return; }
+    try { await api.del(`/api/invoices/${inv.id}`); toast('Invoice deleted', 'info'); fetchInvoices(); setSelectedId(null); }
+    catch (err: any) { toast(err.message || 'Delete failed', 'error'); }
   };
 
   const handleCopyLink = (link: string) => {
     navigator.clipboard?.writeText(link).then(
-      () => toast('支付链接已复制！', 'success'),
-      () => toast('复制失败，请手动复制', 'error')
+      () => toast('Payment link copied!', 'success'),
+      () => toast('Copy failed', 'error')
     );
   };
 
   const handleDownloadPdf = async (inv: Invoice) => {
-    if (demo) { toast('演示模式：PDF 下载功能已就绪', 'info'); return; }
+    if (demo) { toast('Demo: PDF ready', 'info'); return; }
     try {
       const token = localStorage.getItem('studiosage_token');
-      const res = await fetch(`/api/invoices/${inv.id}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('下载失败');
+      const res = await fetch(`/api/invoices/${inv.id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Download failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `invoice-${inv.id.slice(0, 8)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast('PDF 下载中…', 'success');
-    } catch {
-      toast('PDF 下载失败，请重试', 'error');
-    }
+      const a = document.createElement('a'); a.href = url; a.download = `invoice-${inv.id.slice(0, 8)}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast('PDF downloading…', 'success');
+    } catch { toast('PDF download failed', 'error'); }
   };
 
   const paid = invoices.filter(i => i.status === 'paid');
   const totalRevenue = paid.reduce((s, i) => s + i.amount, 0);
   const pendingRevenue = invoices.filter(i => i.status === 'sent').reduce((s, i) => s + i.amount, 0);
 
-  // ── Invoice detail panel ──
   if (selectedId) {
     const inv = invoices.find(i => i.id === selectedId);
     if (!inv) { setSelectedId(null); return null; }
@@ -127,87 +99,67 @@ export default function Invoices() {
     return (
       <div>
         <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-          ← 返回发票列表
+          ← Back to Invoices
         </button>
-
         <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', letterSpacing: '.4px', marginBottom: 4 }}>发票 #{inv.id.slice(0, 8).toUpperCase()}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', letterSpacing: '.4px', marginBottom: 4 }}>INVOICE #{inv.id.slice(0, 8).toUpperCase()}</div>
               <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.3px', margin: 0 }}>{inv.description}</h2>
-              <p style={{ fontSize: 13, color: '#86868B', margin: '4px 0 0' }}>{inv.client_name} · {inv.client_email || '未填写邮箱'}</p>
+              <p style={{ fontSize: 13, color: '#86868B', margin: '4px 0 0' }}>{inv.client_name}{inv.client_email ? ` · ${inv.client_email}` : ''}</p>
             </div>
             <StatusBadge status={inv.status} />
           </div>
 
-          {/* Amount */}
           <div style={{ textAlign: 'center', padding: '20px 0', borderTop: '1px solid rgba(0,0,0,.06)', borderBottom: '1px solid rgba(0,0,0,.06)', marginBottom: 20 }}>
             <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-.5px', color: '#1D1D1F' }}>
               {inv.currency === 'CNY' ? '¥' : '$'}{inv.amount.toLocaleString()}
             </div>
             <div style={{ fontSize: 12, color: '#AEAEB2', marginTop: 4 }}>
-              {inv.payment_schedule === 'three-phase' ? '三期付款 · 50/25/25' : '一次性付款'}
+              {inv.payment_schedule === 'three-phase' ? '3-Phase Payment · 50/25/25' : 'Full Payment'}
               {inv.retainer_type && <span style={{ marginLeft: 8, color: '#FF9500', fontWeight: 600 }}> · {inv.retainer_type}</span>}
             </div>
           </div>
 
-          {/* Line items */}
           {inv.items && inv.items.length > 0 && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#86868B', marginBottom: 8 }}>明细</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#86868B', marginBottom: 8 }}>Line Items</div>
               {inv.items.map((item: any, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: i < inv.items!.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
-                  <span style={{ color: '#555' }}>{item.description || `项目 ${i + 1}`}</span>
+                  <span style={{ color: '#555' }}>{item.description || `Item ${i + 1}`}</span>
                   <span style={{ fontWeight: 600 }}>${(item.unitPrice || item.amount || 0).toLocaleString()}</span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {inv.status === 'draft' && (
-              <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id}
-                style={primaryBtnStyle}>
-                {sendingId === inv.id ? '⏳ 生成支付链接…' : '📤 发送给客户'}
+              <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id} style={primaryBtn}>
+                {sendingId === inv.id ? '⏳ Generating payment link…' : '📤 Send to Client'}
               </button>
             )}
             {(inv.status === 'sent' || inv.status === 'paid') && inv.stripe_payment_link && (
               <>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => window.open(inv.stripe_payment_link!, '_blank')}
-                    style={{ ...primaryBtnStyle, flex: 1 }}>
-                    💳 在 Stripe 中查看
-                  </button>
-                  <button onClick={() => handleCopyLink(inv.stripe_payment_link!)}
-                    style={{ ...secondaryBtnStyle, flex: 1 }}>
-                    📋 复制链接
-                  </button>
+                  <button onClick={() => window.open(inv.stripe_payment_link!, '_blank')} style={{ ...primaryBtn, flex: 1 }}>💳 View in Stripe</button>
+                  <button onClick={() => handleCopyLink(inv.stripe_payment_link!)} style={{ ...secondaryBtn, flex: 1 }}>📋 Copy Link</button>
                 </div>
                 {inv.status === 'sent' && (
-                  <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id}
-                    style={{ ...secondaryBtnStyle, color: '#8E8E93' }}>
-                    🔄 重新生成支付链接
-                  </button>
+                  <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id} style={{ ...secondaryBtn, color: '#8E8E93' }}>🔄 Regenerate Payment Link</button>
                 )}
               </>
             )}
-            <button onClick={() => handleDownloadPdf(inv)} style={secondaryBtnStyle}>
-              🖨 下载 PDF
-            </button>
+            <button onClick={() => handleDownloadPdf(inv)} style={secondaryBtn}>🖨 Download PDF</button>
             {inv.status === 'draft' && (
-              <button onClick={() => { handleDelete(inv); }} style={{ ...secondaryBtnStyle, color: '#FF3B30' }}>
-                🗑 删除草稿
-              </button>
+              <button onClick={() => handleDelete(inv)} style={{ ...secondaryBtn, color: '#FF3B30' }}>🗑 Delete Draft</button>
             )}
           </div>
 
-          {/* Meta info */}
           <div style={{ marginTop: 24, padding: '12px 16px', background: 'rgba(0,0,0,.02)', borderRadius: 10 }}>
             <div style={{ fontSize: 11, color: '#AEAEB2' }}>
-              创建于 {formatDate(inv.created_at)}
-              {inv.stripe_payment_link && <span style={{ marginLeft: 12 }}>Stripe 已连接</span>}
+              Created {formatDate(inv.created_at)}
+              {inv.stripe_payment_link && <span style={{ marginLeft: 12 }}>Stripe Connected</span>}
             </div>
           </div>
         </div>
@@ -215,94 +167,58 @@ export default function Invoices() {
     );
   }
 
-  // ── Invoices list view ──
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.5px', margin: 0 }}>发票</h2>
+          <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.5px', margin: 0 }}>Invoices</h2>
           <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>
-            {invoices.length} 张 · 已收 <strong style={{ color: '#34C759' }}>${totalRevenue.toLocaleString()}</strong>
-            {pendingRevenue > 0 && <><span style={{ margin: '0 4px' }}>·</span> 待收 <strong style={{ color: '#FF9500' }}>${pendingRevenue.toLocaleString()}</strong></>}
+            {invoices.length} invoices · Received <strong style={{ color: '#34C759' }}>${totalRevenue.toLocaleString()}</strong>
+            {pendingRevenue > 0 && <><span style={{ margin: '0 4px' }}>·</span> Pending <strong style={{ color: '#FF9500' }}>${pendingRevenue.toLocaleString()}</strong></>}
           </p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} style={{
-          padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
-          background: '#007AFF', color: '#fff', letterSpacing: '-.1px',
-        }}>+ 新建</button>
+        <button onClick={() => setShowForm(!showForm)} style={{ padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: '#007AFF', color: '#fff', letterSpacing: '-.1px' }}>+ New</button>
       </div>
 
-      {showForm && (
-        <InvoiceForm
-          onDone={() => { setShowForm(false); fetchInvoices(); }}
-          toast={toast}
-        />
-      )}
+      {showForm && <InvoiceForm onDone={() => { setShowForm(false); fetchInvoices(); }} toast={toast} />}
 
-      {loading && (
-        <div style={{ padding: 40, textAlign: 'center', color: '#AEAEB2' }}>加载中…</div>
-      )}
+      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#AEAEB2' }}>Loading…</div>}
 
       {!loading && invoices.length === 0 && !showForm && (
         <div style={{ textAlign: 'center', padding: 48, background: '#fff', borderRadius: 16 }}>
           <div style={{ fontSize: 36, marginBottom: 8, opacity: .6 }}>📄</div>
-          <p style={{ fontSize: 15, fontWeight: 700 }}>还没有发票</p>
-          <p style={{ fontSize: 13, color: '#86868B' }}>生成发票发给客户开始收款</p>
+          <p style={{ fontSize: 15, fontWeight: 700 }}>No invoices yet</p>
+          <p style={{ fontSize: 13, color: '#86868B' }}>Create invoices to start billing your clients</p>
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {invoices.map(inv => (
-          <div key={inv.id}
-            onClick={() => setSelectedId(inv.id)}
-            style={{
-              background: '#fff', borderRadius: 14, padding: '16px 18px', cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,.04)', display: 'flex', alignItems: 'center',
-              transition: 'all .15s', opacity: inv.status === 'paid' ? .75 : 1,
-            }}>
-            {/* ID */}
+          <div key={inv.id} onClick={() => setSelectedId(inv.id)} style={{
+            background: '#fff', borderRadius: 14, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.04)', display: 'flex', alignItems: 'center', transition: 'all .15s', opacity: inv.status === 'paid' ? .75 : 1,
+          }}>
             <div style={{ width: 80, flexShrink: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#AEAEB2', letterSpacing: '.3px' }}>
-                #{inv.id.slice(0, 8).toUpperCase()}
-              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#AEAEB2', letterSpacing: '.3px' }}>#{inv.id.slice(0, 8).toUpperCase()}</div>
             </div>
-
-            {/* Client + desc */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-.1px' }}>{inv.client_name}</div>
               <div style={{ fontSize: 12, color: '#86868B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {inv.description}
-                {inv.payment_schedule === 'three-phase' && ' · 三期付款'}
+                {inv.description}{inv.payment_schedule === 'three-phase' && ' · 3-Phase'}
               </div>
             </div>
-
-            {/* Amount */}
             <div style={{ fontSize: 16, fontWeight: 800, marginRight: 10, letterSpacing: '-.2px', whiteSpace: 'nowrap' }}>
               {inv.currency === 'CNY' ? '¥' : '$'}{inv.amount.toLocaleString()}
             </div>
-
-            {/* Status badge */}
             <StatusBadge status={inv.status} />
-
-            {/* Quick actions */}
             <div style={{ marginLeft: 8, display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
               {inv.status === 'draft' && (
-                <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id}
-                  title="发送"
-                  style={iconBtnStyle}>
-                  {sendingId === inv.id ? '⏳' : '📤'}
-                </button>
+                <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id} title="Send" style={iconBtn}>{sendingId === inv.id ? '⏳' : '📤'}</button>
               )}
               {inv.stripe_payment_link && (
-                <button onClick={() => handleCopyLink(inv.stripe_payment_link!)}
-                  title="复制支付链接"
-                  style={iconBtnStyle}>📋</button>
+                <button onClick={() => handleCopyLink(inv.stripe_payment_link!)} title="Copy link" style={iconBtn}>📋</button>
               )}
-              <button onClick={() => handleDownloadPdf(inv)}
-                title="下载 PDF"
-                style={iconBtnStyle}>🖨</button>
+              <button onClick={() => handleDownloadPdf(inv)} title="Download PDF" style={iconBtn}>🖨</button>
             </div>
-
             <span style={{ fontSize: 14, color: '#C7C7CC', marginLeft: 4 }}>›</span>
           </div>
         ))}
@@ -311,158 +227,78 @@ export default function Invoices() {
   );
 }
 
-// ── Sub-components ──
-
 function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { bg: string; color: string; label: string }> = {
-    draft: { bg: 'rgba(142,142,147,.1)', color: '#8E8E93', label: 'Draft' },
-    sent: { bg: 'rgba(255,149,0,.1)', color: '#FF9500', label: 'Unpaid' },
-    paid: { bg: 'rgba(52,199,89,.1)', color: '#34C759', label: 'Paid' },
-    overdue: { bg: 'rgba(255,59,48,.1)', color: '#FF3B30', label: 'Overdue' },
+  const m: Record<string, { bg: string; c: string; label: string }> = {
+    draft: { bg: 'rgba(142,142,147,.1)', c: '#8E8E93', label: 'Draft' },
+    sent: { bg: 'rgba(255,149,0,.1)', c: '#FF9500', label: 'Unpaid' },
+    paid: { bg: 'rgba(52,199,89,.1)', c: '#34C759', label: 'Paid' },
+    overdue: { bg: 'rgba(255,59,48,.1)', c: '#FF3B30', label: 'Overdue' },
   };
-  const c = config[status] || config.draft;
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 12,
-      background: c.bg, color: c.color, letterSpacing: '.4px', whiteSpace: 'nowrap',
-    }}>{c.label}</span>
-  );
+  const s = m[status] || m.draft;
+  return <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 12, background: s.bg, color: s.c, letterSpacing: '.4px', whiteSpace: 'nowrap' }}>{s.label}</span>;
 }
 
 function InvoiceForm({ onDone, toast }: { onDone: () => void; toast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
-  const [form, setForm] = useState({
-    clientName: '', clientEmail: '', packageType: 'wedding',
-    amount: '', paymentSchedule: 'three-phase',
-  });
+  const [form, setForm] = useState({ clientName: '', clientEmail: '', packageType: 'wedding', amount: '', paymentSchedule: 'three-phase' });
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.clientName || !form.amount) {
-      toast('请填写客户名称和金额', 'error');
-      return;
-    }
+    if (!form.clientName || !form.amount) { toast('Please fill in client name and amount', 'error'); return; }
     setSubmitting(true);
     try {
-      const data = await api.post<{ id: string; stripePaymentLink?: string }>('/api/invoices/generate', {
-        clientName: form.clientName,
-        clientEmail: form.clientEmail,
-        packageType: form.packageType,
-        amount: Number(form.amount),
-        paymentSchedule: form.paymentSchedule,
-        currency: 'USD',
-      });
-      toast('发票草稿已生成！', 'success');
-      onDone();
-    } catch (err: any) {
-      toast(err.message || '网络错误', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+      await api.post('/api/invoices/generate', { clientName: form.clientName, clientEmail: form.clientEmail, packageType: form.packageType, amount: Number(form.amount), paymentSchedule: form.paymentSchedule, currency: 'USD' });
+      toast('Draft created!', 'success'); onDone();
+    } catch (err: any) { toast(err.message || 'Network error', 'error'); }
+    finally { setSubmitting(false); }
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{
-      background: '#fff', borderRadius: 16, padding: 18,
-      boxShadow: '0 1px 3px rgba(0,0,0,.04)',
-      display: 'flex', flexDirection: 'column', gap: 12,
-    }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>新建发票</div>
-      <Row>
-        <Field label="客户名称 *" value={form.clientName} onChange={v => setForm(p => ({ ...p, clientName: v }))} placeholder="Sarah & Mike" />
-        <Field label="客户邮箱" value={form.clientEmail} onChange={v => setForm(p => ({ ...p, clientEmail: v }))} placeholder="client@example.com" type="email" />
-      </Row>
-      <Row>
+    <form onSubmit={handleSubmit} style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 1px 3px rgba(0,0,0,.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>New Invoice</div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <Field label="Client Name *" value={form.clientName} onChange={v => setForm(p => ({ ...p, clientName: v }))} placeholder="Sarah & Mike" />
+        <Field label="Client Email" value={form.clientEmail} onChange={v => setForm(p => ({ ...p, clientEmail: v }))} placeholder="client@example.com" type="email" />
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>套餐类型</label>
-          <select value={form.packageType} onChange={e => setForm(p => ({ ...p, packageType: e.target.value }))} style={selectStyle}>
-            <option value="wedding">婚礼</option>
-            <option value="portrait">肖像</option>
-            <option value="event">活动</option>
-            <option value="commercial">商业</option>
-            <option value="other">其他</option>
+          <label style={lbl}>Package Type</label>
+          <select value={form.packageType} onChange={e => setForm(p => ({ ...p, packageType: e.target.value }))} style={sel}>
+            <option value="wedding">Wedding</option>
+            <option value="portrait">Portrait</option>
+            <option value="event">Event</option>
+            <option value="commercial">Commercial</option>
+            <option value="other">Other</option>
           </select>
         </div>
-        <Field label="金额 (USD) *" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} placeholder="4500" type="number" />
-      </Row>
-      <Row>
+        <Field label="Amount (USD) *" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} placeholder="4500" type="number" />
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>付款方式</label>
-          <select value={form.paymentSchedule} onChange={e => setForm(p => ({ ...p, paymentSchedule: e.target.value }))} style={selectStyle}>
-            <option value="three-phase">三期付款 (50/25/25)</option>
-            <option value="single">一次性付清</option>
+          <label style={lbl}>Payment Schedule</label>
+          <select value={form.paymentSchedule} onChange={e => setForm(p => ({ ...p, paymentSchedule: e.target.value }))} style={sel}>
+            <option value="three-phase">3-Phase (50/25/25)</option>
+            <option value="single">Full Payment</option>
           </select>
         </div>
         <div style={{ flex: 1 }} />
-      </Row>
-      <button type="submit" disabled={submitting} style={{
-        width: '100%', padding: '12px', borderRadius: 14, fontSize: 14, fontWeight: 600,
-        background: submitting ? '#AEAEB2' : '#007AFF', color: '#fff',
-        border: 'none', cursor: submitting ? 'default' : 'pointer', letterSpacing: '-.1px',
-      }}>
-        {submitting ? '生成中…' : '生成草稿'}
+      </div>
+      <button type="submit" disabled={submitting} style={{ width: '100%', padding: '12px', borderRadius: 14, fontSize: 14, fontWeight: 600, background: submitting ? '#AEAEB2' : '#007AFF', color: '#fff', border: 'none', cursor: submitting ? 'default' : 'pointer', letterSpacing: '-.1px' }}>
+        {submitting ? 'Creating…' : 'Create Draft'}
       </button>
     </form>
   );
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text' }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder: string; type?: string;
-}) {
-  return (
-    <div style={{ flex: 1 }}>
-      <label style={labelStyle}>{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
-    </div>
-  );
+function Field({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; type?: string }) {
+  return <div style={{ flex: 1 }}><label style={lbl}>{label}</label><input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inp} /></div>;
 }
 
-function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', gap: 10 }}>{children}</div>;
-}
+function formatDate(iso: string) { return iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''; }
 
-function formatDate(iso: string) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-// ── Styles ──
-
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 11, fontWeight: 600, color: '#86868B',
-  marginBottom: 4, letterSpacing: '.2px',
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 12px', borderRadius: 10,
-  border: '1px solid rgba(0,0,0,.1)', fontSize: 13,
-  outline: 'none', boxSizing: 'border-box',
-  background: 'rgba(0,0,0,.02)',
-};
-
-const selectStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 12px', borderRadius: 10,
-  border: '1px solid rgba(0,0,0,.1)', fontSize: 13,
-  outline: 'none', boxSizing: 'border-box',
-  background: 'rgba(0,0,0,.02)',
-};
-
-const primaryBtnStyle: React.CSSProperties = {
-  width: '100%', padding: '12px', borderRadius: 14, border: 'none',
-  background: '#007AFF', color: '#fff', fontSize: 14, fontWeight: 600,
-  cursor: 'pointer', letterSpacing: '-.1px',
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-  width: '100%', padding: '12px', borderRadius: 14,
-  border: '1px solid rgba(0,0,0,.1)', background: '#fff',
-  color: '#1D1D1F', fontSize: 14, fontWeight: 500,
-  cursor: 'pointer', letterSpacing: '-.1px',
-};
-
-const iconBtnStyle: React.CSSProperties = {
-  width: 30, height: 30, borderRadius: 8, border: 'none',
-  background: 'rgba(0,0,0,.04)', fontSize: 14, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  padding: 0,
-};
+const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#86868B', marginBottom: 4, letterSpacing: '.2px' };
+const inp: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,.1)', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: 'rgba(0,0,0,.02)' };
+const sel: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,.1)', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: 'rgba(0,0,0,.02)' };
+const primaryBtn: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 14, border: 'none', background: '#007AFF', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', letterSpacing: '-.1px' };
+const secondaryBtn: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 14, border: '1px solid rgba(0,0,0,.1)', background: '#fff', color: '#1D1D1F', fontSize: 14, fontWeight: 500, cursor: 'pointer', letterSpacing: '-.1px' };
+const iconBtn: React.CSSProperties = { width: 30, height: 30, borderRadius: 8, border: 'none', background: 'rgba(0,0,0,.04)', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
