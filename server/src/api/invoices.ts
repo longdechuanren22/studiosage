@@ -129,6 +129,23 @@ router.post('/:id/send', async (req, res) => {
 
   const updated = queryOne('SELECT * FROM invoices WHERE id = ?', [invoice.id]) as any;
   res.json({ ok: true, invoice: updated });
+
+  // Email payment link to client (best effort)
+  if (updated?.client_email && updated?.stripe_payment_link) {
+    try {
+      const conn = queryOne("SELECT * FROM tool_connections WHERE user_id = ? AND tool_id = 'email_imap' AND status = 'active'", [userId]) as any;
+      if (conn) {
+        const cfg = JSON.parse(conn.access_token_encrypted || '{}');
+        const { decrypt } = await import('../utils/crypto.js');
+        const password = conn.refresh_token_encrypted ? decrypt(conn.refresh_token_encrypted) : '';
+        const { sendReply } = await import('../adapters/email.js');
+        await sendReply({ ...cfg, password }, updated.client_email,
+          `Invoice from StudioSage — ${updated.description}`,
+          `Hi ${updated.client_name},\n\nHere's your invoice for ${updated.description}.\n\nAmount: $${updated.amount.toLocaleString()} ${updated.currency}\nPayment Schedule: ${updated.payment_schedule === 'three-phase' ? '3-Phase (50/25/25)' : 'Full Payment'}\n\nPay online: ${updated.stripe_payment_link}\n\nThank you for your business!\n\n— Powered by StudioSage`
+        );
+      }
+    } catch { /* Best effort */ }
+  }
 });
 
 // Update invoice

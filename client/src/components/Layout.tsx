@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useContext, useState } from 'react';
+import { ReactNode, createContext, useContext, useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
 import { t, useI18n } from '../i18n';
@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
 export default function Layout({ children }: { children: ReactNode }) {
   const [demo, setDemo] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dark, setDark] = useState(() => localStorage.getItem('studiosage_dark') === '1');
   const { user, logout } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,6 +37,13 @@ export default function Layout({ children }: { children: ReactNode }) {
   };
 
   const toggleLang = () => setLang(lang === 'en' ? 'zh' : 'en');
+  const toggleDark = () => {
+    const next = !dark;
+    setDark(next);
+    localStorage.setItem('studiosage_dark', next ? '1' : '0');
+    document.body.classList.toggle('dark', next);
+  };
+  useEffect(() => { document.body.classList.toggle('dark', dark); }, []);
 
   return (
     <DemoContext.Provider value={{ demo, toggleDemo: () => setDemo(!demo) }}>
@@ -52,6 +60,10 @@ export default function Layout({ children }: { children: ReactNode }) {
                   {t('app.demo')}
                 </span>
               )}
+              <button onClick={toggleDark} style={{
+                background: 'none', border: 'none', fontSize: 14, cursor: 'pointer',
+                color: '#86868B', padding: '2px 6px', borderRadius: 4,
+              }} title="Dark mode">{dark ? '☀' : '🌙'}</button>
               <button onClick={toggleLang} style={{
                 background: 'none', border: 'none', fontSize: 12, cursor: 'pointer',
                 color: '#86868B', padding: '2px 6px', borderRadius: 4,
