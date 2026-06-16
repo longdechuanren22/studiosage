@@ -1,6 +1,7 @@
 import { Router, type Router as RouterType } from 'express';
 import { initDb } from '../db/schema.js';
 import { queryOne, run } from '../db/query.js';
+import { getAIStatus } from '../ai/engine.js';
 
 const router: RouterType = Router();
 
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
   } catch (_) { /* DB may not be ready */ }
 
   res.json({
-    ai: { configured: !!(process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY) },
+    ai: { configured: !!(process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY), ...getAIStatus() },
     email: { connected: emailConnected, email: emailProvider, autoReply },
     google: { configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) },
     gmail: { connected: !!process.env.GOOGLE_ACCESS_TOKEN },
