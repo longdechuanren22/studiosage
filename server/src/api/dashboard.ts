@@ -81,4 +81,54 @@ router.get('/', async (req, res) => {
   });
 });
 
+// Analytics — revenue trends, conversion rates, seasonal breakdown
+router.get('/analytics', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+
+  // Monthly revenue (last 12 months)
+  const monthlyRevenue = queryAll(`
+    SELECT strftime('%Y-%m', created_at) as month, SUM(amount) as total, COUNT(*) as count
+    FROM invoices WHERE user_id = ? AND status = 'paid'
+    AND created_at >= datetime('now', '-12 months')
+    GROUP BY month ORDER BY month
+  `, [userId]) as any[];
+
+  // Client conversion: inquiry → booked rate
+  const totalInquiries = (queryOne("SELECT COUNT(*) as c FROM clients WHERE user_id = ? AND status != 'archived'", [userId]) as any)?.c || 0;
+  const totalBooked = (queryOne("SELECT COUNT(*) as c FROM clients WHERE user_id = ? AND stage IN ('booked','shooting','production','delivered')", [userId]) as any)?.c || 0;
+  const conversionRate = totalInquiries > 0 ? Math.round((totalBooked / totalInquiries) * 100) : 0;
+
+  // Top service types
+  const serviceBreakdown = queryAll(`
+    SELECT type, COUNT(*) as count FROM clients WHERE user_id = ? AND type != '' AND status != 'archived'
+    GROUP BY type ORDER BY count DESC
+  `, [userId]) as any[];
+
+  // Average response time (messages: received → replied)
+  const avgResponse = queryOne(`
+    SELECT AVG(
+      (julianday((SELECT MIN(created_at) FROM messages WHERE client_id = m.client_id AND status = 'replied')) -
+       julianday(m.created_at)) * 24
+    ) as hours
+    FROM messages m WHERE m.user_id = ? AND m.status = 'replied'
+  `, [userId]) as any;
+
+  // Monthly message volume
+  const messageVolume = queryAll(`
+    SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as count
+    FROM messages WHERE user_id = ? AND category != 'spam'
+    AND created_at >= datetime('now', '-6 months')
+    GROUP BY month ORDER BY month
+  `, [userId]) as any[];
+
+  res.json({
+    monthlyRevenue,
+    conversion: { totalInquiries, totalBooked, rate: conversionRate },
+    serviceBreakdown,
+    avgResponseHours: avgResponse?.hours ? Math.round(avgResponse.hours * 10) / 10 : null,
+    messageVolume,
+  });
+});
+
 export { router as dashboardRoutes };

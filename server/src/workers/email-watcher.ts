@@ -47,13 +47,14 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
 
         const fromEmail = extractEmail(msg.from || '');
         const fromName = extractName(msg.from || '');
-        const bodyName = extractNameFromBody(msg.body || '');
+        const cleanBody = stripHtml(msg.body || '');
+        const bodyName = extractNameFromBody(cleanBody || '');
 
         // Reputation: known client vs unknown sender
         const isKnownSender: boolean = !!fromEmail && knownSenders.has(fromEmail.toLowerCase());
 
         // Classify the message
-        const classification = await classifyMessage(msg.body || '', msg.subject || '', {
+        const classification = await classifyMessage(cleanBody, msg.subject || '', {
           isKnownSender,
           fromEmail: fromEmail || undefined,
         } as any);
@@ -93,7 +94,7 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
         run(
           `INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, ai_reply, channel, imap_uid, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [msgId, uid, client?.id || null, msg.from || '', msg.subject || '', msg.body || '',
+          [msgId, uid, client?.id || null, msg.from || '', msg.subject || '', cleanBody,
            classification.category, isSpam ? 'archived' : 'pending',
            replyText, 'email', msg.id, msg.date.toISOString()]
         );
@@ -118,7 +119,7 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
           });
 
           // ── Extract key entities from message ──
-          const entities = extractEntities(msg.body || '', msg.subject || '');
+          const entities = extractEntities(cleanBody, msg.subject || '');
           for (const entity of entities) {
             run(
               `INSERT INTO client_insights (id, user_id, client_id, message_id, type, value, raw_text)
@@ -162,6 +163,25 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
 }
 
 // Extract email address from "Name <email>" format
+// Strip HTML tags — keep plain text for AI processing
+function stripHtml(html: string): string {
+  if (!html || !/<[^>]+>/.test(html)) return html || '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function extractEmail(from: string): string {
   const m = from.match(/<([^>]+)>/);
   return m ? m[1].trim().toLowerCase() : from.trim().toLowerCase();

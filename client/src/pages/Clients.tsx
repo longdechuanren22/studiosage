@@ -35,6 +35,7 @@ export default function Clients() {
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', wechat_id: '', type: '', notes: '' });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [importing, setImporting] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -221,6 +222,27 @@ export default function Clients() {
             placeholder="Search clients…"
             style={{ flex: 1, padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,.1)', fontSize: 13, outline: 'none', background: '#fff' }}
           />
+          <label style={{ padding: '8px 16px', borderRadius: 10, border: '1px solid rgba(0,0,0,.1)', background: '#fff', color: '#1D1D1F', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {importing ? 'Importing…' : '📥 Import'}
+            <input type="file" accept=".csv" hidden onChange={async (e) => {
+              const file = e.target.files?.[0]; if (!file) return;
+              setImporting(true);
+              const text = await file.text();
+              const lines = text.split('\n').filter(l => l.trim());
+              if (lines.length < 2) { setImporting(false); return; }
+              const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+              const rows = lines.slice(1).map(line => {
+                const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                const obj: any = {};
+                headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+                return obj;
+              });
+              try { await api.post('/api/clients/import', { rows }); fetchClients(); }
+              catch {}
+              setImporting(false);
+              e.target.value = '';
+            }} />
+          </label>
           <button onClick={() => setShowNewClient(true)}
             style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#007AFF', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             {t('clients.newClient')}

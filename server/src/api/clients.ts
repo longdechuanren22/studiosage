@@ -151,6 +151,28 @@ router.get('/:id/timeline', async (req, res) => {
   res.json({ ok: true, timeline });
 });
 
+// Import clients from CSV
+router.post('/import', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const { rows } = req.body; // Array of {name, email, phone, type, notes}
+  if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ ok: false, error: 'No data provided' });
+
+  let created = 0;
+  for (const row of rows) {
+    if (!row.name && !row.email) continue;
+    const id = uuidv4();
+    const existing = row.email ? queryOne('SELECT id FROM clients WHERE email = ? AND user_id = ?', [row.email, userId]) : null;
+    if (existing) continue; // Skip duplicates
+
+    run(`INSERT INTO clients (id, user_id, name, email, phone, type, notes, source, stage)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, userId, row.name || '', row.email || '', row.phone || '', row.type || '', row.notes || '', 'import', 'inquiry']);
+    created++;
+  }
+  res.json({ ok: true, created, total: rows.length });
+});
+
 // Export clients as CSV
 router.get('/export/csv', async (req, res) => {
   await initDb();
