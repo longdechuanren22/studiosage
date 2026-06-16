@@ -7,7 +7,24 @@ import { LanguageProvider } from './i18n';
 import App from './App';
 import './index.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Global error guard — prevents white screen on refresh crashes
+window.addEventListener('error', (e) => {
+  console.error('[GlobalError]', e.error?.message || e.message);
+  // Only catch render errors, not network errors
+  if (e.error?.message?.includes('reading') || e.error?.message?.includes('undefined')) {
+    localStorage.removeItem('studiosage_token');
+    window.location.replace('/sage/login');
+  }
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[UnhandledRejection]', e.reason?.message || e.reason);
+});
+
+const root = document.getElementById('root');
+if (!root) throw new Error('Root element not found');
+
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <BrowserRouter basename="/sage">
       <LanguageProvider>

@@ -10,15 +10,22 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, info: any) {
+    console.error('[ErrorBoundary]', error.message, info?.componentStack?.slice(0, 300));
+  }
+
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-          <span className="text-4xl mb-4">📸</span>
-          <h2 className="text-lg font-semibold text-gray-700">Something went wrong</h2>
-          <p className="text-sm text-gray-400 mt-1 mb-4">We're on it. Try refreshing the page.</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-sage-500 text-white text-sm rounded-full">
-            Refresh
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', padding: 40, textAlign: 'center', fontFamily: '-apple-system, sans-serif' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1D1D1F', marginBottom: 8 }}>Something went wrong</h2>
+          <p style={{ fontSize: 13, color: '#FF3B30', marginBottom: 16, maxWidth: 500, wordBreak: 'break-all', background: 'rgba(255,59,48,.06)', padding: '10px 14px', borderRadius: 10 }}>
+            {this.state.error?.message || 'Unknown error'}
+          </p>
+          <button onClick={() => { window.location.href = '/sage/'; }}
+            style={{ padding: '10px 24px', borderRadius: 12, border: 'none', background: '#007AFF', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+            Back to Dashboard
           </button>
         </div>
       );

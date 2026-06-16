@@ -21,9 +21,11 @@ async function request<T = any>(method: string, url: string, body?: unknown): Pr
 
   if (res.status === 401) {
     clearToken();
-    // Redirect to login — preserve basename
     if (!url.includes('/api/auth/')) {
-      window.location.href = '/sage/login';
+      // Immediate redirect — stop all further execution
+      window.location.replace('/sage/login');
+      // Never resolve — prevent any further code execution
+      return new Promise(() => {});
     }
     throw new Error('Session expired');
   }
