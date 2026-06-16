@@ -10,6 +10,7 @@ import { findOrCreateClient } from '../api/clients.js';
 import { notifyMessage, notifyClientUpdated } from '../utils/events.js';
 
 let running = false;
+let polling = false;
 
 export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, userId?: string) {
   if (running) {
@@ -22,6 +23,8 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
   console.log(`[EmailWatcher] Polling ${cfg.email} every ${intervalMs / 1000}s (user: ${uid})`);
 
   const poll = async () => {
+    if (polling) return; // Prevent concurrent polls
+    polling = true;
     try {
       const safeLimit = Math.max(10, Math.floor(intervalMs / 10000));
       const messages = await fetchRecentMessages(cfg, safeLimit);
@@ -146,7 +149,8 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
       }
     } catch (err) {
       console.error('[EmailWatcher] Poll failed, will retry:', (err as Error).message);
-      // Don't crash — the next interval will retry
+    } finally {
+      polling = false;
     }
   };
 
