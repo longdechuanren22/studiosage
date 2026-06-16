@@ -129,4 +129,36 @@ router.post('/reset-password', async (req, res) => {
   res.json({ ok: true, message: 'Password has been reset. You can now login.' });
 });
 
+// PATCH /api/auth/profile — update name/email
+router.patch('/profile', authenticate, async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const { name, email } = req.body;
+  if (email) {
+    const existing = queryOne('SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
+    if (existing) return res.status(409).json({ ok: false, error: 'Email already in use' });
+  }
+  const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as any;
+  run('UPDATE users SET name = ?, email = ? WHERE id = ?', [name || user.name, email || user.email, userId]);
+  res.json({ ok: true, user: { id: userId, name: name || user.name, email: email || user.email, plan: user.plan } });
+});
+
+// POST /api/auth/change-password — requires current password
+router.post('/change-password', authenticate, async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ ok: false, error: 'Current and new password required' });
+  if (newPassword.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+
+  const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as any;
+  if (!user.password_hash) return res.status(400).json({ ok: false, error: 'Account uses legacy auth' });
+  const valid = await verifyPassword(currentPassword, user.password_hash);
+  if (!valid) return res.status(400).json({ ok: false, error: 'Current password is incorrect' });
+
+  const hash = await hashPassword(newPassword);
+  run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, userId]);
+  res.json({ ok: true });
+});
+
 export { router as authRoutes };

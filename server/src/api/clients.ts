@@ -151,4 +151,24 @@ router.get('/:id/timeline', async (req, res) => {
   res.json({ ok: true, timeline });
 });
 
+// Export clients as CSV
+router.get('/export/csv', async (req, res) => {
+  await initDb();
+  const userId = req.userId!;
+  const clients = queryAll(
+    `SELECT name, email, phone, wechat_id, type, stage, source, status, notes, created_at
+     FROM clients WHERE user_id = ? AND status != 'archived' ORDER BY name`,
+    [userId]
+  ) as any[];
+
+  const header = 'Name,Email,Phone,WeChat,Type,Stage,Source,Status,Notes,Created\n';
+  const rows = clients.map(c =>
+    `"${(c.name || '').replace(/"/g, '""')}","${(c.email || '').replace(/"/g, '""')}","${(c.phone || '').replace(/"/g, '""')}","${(c.wechat_id || '').replace(/"/g, '""')}","${c.type || ''}","${c.stage || ''}","${c.source || ''}","${c.status || ''}","${(c.notes || '').replace(/"/g, '""')}","${c.created_at || ''}"`
+  ).join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="studiosage-clients.csv"');
+  res.send('﻿' + header + rows); // BOM for Excel UTF-8
+});
+
 export { router as clientRoutes };

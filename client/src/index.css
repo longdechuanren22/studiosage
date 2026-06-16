@@ -73,3 +73,9 @@ body {
   box-shadow: 0 1px 3px rgba(0,0,0,.15);
 }
 .toggle-track.on::after { transform: translateX(20px); }
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .max-w-4xl { max-width: 100% !important; padding-left: 12px; padding-right: 12px; }
+  main.pb-20 { padding-bottom: 80px; }
+}
