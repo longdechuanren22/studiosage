@@ -48,9 +48,18 @@ export default function PortalProposal() {
         <div style={{ background: '#fff', borderRadius: 14, padding: 18, marginBottom: 12 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 8px' }}>{t('portal.packages')}</h3>
           {proposal.packages.map((pkg: any, i: number) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
-              <strong>{pkg.name || `Package ${i + 1}`}</strong>
-              {pkg.price && <span style={{ float: 'right', fontWeight: 700 }}>${pkg.price}</span>}
+            <div key={i} style={{ padding: '10px 0', borderBottom: i < proposal.packages.length - 1 ? '1px solid rgba(0,0,0,.06)' : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: 15 }}>{pkg.name || `Package ${i + 1}`}</strong>
+                {pkg.price && <span style={{ fontWeight: 700, fontSize: 16, color: '#007AFF' }}>${Number(pkg.price).toLocaleString()}</span>}
+              </div>
+              {pkg.includes?.length > 0 && (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#86868B' }}>
+                  {pkg.includes.map((item: string, j: number) => (
+                    <span key={j} style={{ marginRight: 12 }}>✓ {item}</span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

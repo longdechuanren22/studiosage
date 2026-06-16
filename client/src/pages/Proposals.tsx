@@ -15,14 +15,6 @@ interface Proposal {
 const FLOW_KEYS = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
 const FLOW_ICONS: Record<string, string> = { draft: '📝', sent: '📤', viewed: '👁', accepted: '✅', declined: '❌' };
 
-const PACKAGES = [
-  { name: 'Platinum', price: 4500, desc: 'Full day + 2 photographers + Album + 200 edits' },
-  { name: 'Gold', price: 2800, desc: '6 hours + 1 photographer + 100 edits' },
-  { name: 'Basic', price: 1200, desc: '2 hours + 30 edits' },
-  { name: 'Portrait', price: 450, desc: '1 hour + 15 edits' },
-  { name: 'Event', price: 1800, desc: '4 hours event + 150 edits' },
-];
-
 export default function Proposals() {
   const { token } = useUser();
   const { toast } = useToast();
@@ -154,6 +146,11 @@ export default function Proposals() {
                   <div style={{ fontSize: 12, color: '#86868B' }}>
                     {p.client_name ? `👤 ${p.client_name}` : `⚠️ ${t('proposals.clientUnspecified')}`}
                     {p.client_email ? ` · ${p.client_email}` : ''}
+                    {p.packages && Array.isArray(p.packages) && p.packages.length > 0 && (
+                      <span style={{ marginLeft: 8, fontWeight: 600, color: '#007AFF' }}>
+                        {p.packages.length} package{p.packages.length > 1 ? 's' : ''}
+                      </span>
+                    )}
                     <span style={{ marginLeft: 8 }}>{new Date(p.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -198,26 +195,41 @@ export default function Proposals() {
   );
 }
 
+interface PackageItem { name: string; price: string; includes: string; }
+
 function ProposalForm({ clients, toast, onDone }: { clients: Client[]; toast: (msg: string, type?: 'success' | 'error' | 'info') => void; onDone: () => void }) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [form, setForm] = useState({ title: '', clientId: '', packageName: 'Platinum', packagePrice: '4500', customPackageDesc: '', contractTerms: '' });
+  const [form, setForm] = useState({ title: '', clientId: '' });
+  const [packages, setPackages] = useState<PackageItem[]>([
+    { name: 'Platinum', price: '4500', includes: 'Full day + 2 photographers + Album + 200 edits' },
+    { name: 'Gold', price: '2800', includes: '6 hours + 1 photographer + 100 edits' },
+  ]);
+  const [contractTerms, setContractTerms] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const selectedPkg = PACKAGES.find(p => p.name === form.packageName);
   const selectedClient = clients.find(c => c.id === form.clientId);
+
+  const addPackage = () => setPackages(p => [...p, { name: '', price: '', includes: '' }]);
+  const removePackage = (i: number) => setPackages(p => p.filter((_, j) => j !== i));
+  const updatePackage = (i: number, f: Partial<PackageItem>) => setPackages(p => p.map((pkg, j) => j === i ? { ...pkg, ...f } : pkg));
 
   const goNext = () => {
     if (!form.title.trim()) { toast('Please enter a proposal title', 'error'); return; }
+    if (!packages.some(p => p.name.trim() && p.price)) { toast('Add at least one package with name and price', 'error'); return; }
     setStep(2);
   };
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const pkg = { name: form.packageName, price: Number(form.packagePrice), includes: (selectedPkg?.desc || '').split(' + ').map(s => s.trim()) };
+      const pkgData = packages.filter(p => p.name.trim() && p.price).map(p => ({
+        name: p.name, price: Number(p.price),
+        includes: p.includes.split(/[,+]/).map(s => s.trim()).filter(Boolean),
+      }));
+      const pricing: Record<string, number> = {};
+      pkgData.forEach(p => { pricing[p.name] = p.price; });
       const data = await api.post<{ id: string; shareToken: string }>('/api/proposals', {
-        title: form.title, clientId: form.clientId || null, packages: [pkg],
-        pricing: { [form.packageName]: Number(form.packagePrice) }, contractTerms: form.contractTerms,
+        title: form.title, clientId: form.clientId || null,
+        packages: pkgData, pricing, contractTerms,
       });
       toast(t('proposals.created'), 'success');
       if (data.shareToken) {
@@ -231,54 +243,69 @@ function ProposalForm({ clients, toast, onDone }: { clients: Client[]; toast: (m
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, letterSpacing: '-.1px' }}>{step === 1 ? t('proposals.form.step1') : t('proposals.form.step2')}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, letterSpacing: '-.1px' }}>{step === 1 ? '① Packages' : '② Contract & Send'}</div>
       {step === 1 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>{t('proposals.client')}</label>
+            <label style={labelStyle}>Client</label>
             <select value={form.clientId} onChange={e => setForm(p => ({ ...p, clientId: e.target.value }))} style={selectStyle}>
-              <option value="">{t('proposals.clientNone')}</option>
-              {clients.map(c => (<option key={c.id} value={c.id}>{c.name} · {c.email || c.stage}</option>))}
+              <option value="">— Select client —</option>
+              {clients.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
-            {clients.length === 0 && <p style={{ fontSize: 11, color: '#AEAEB2', margin: '4px 0 0' }}>{t('proposals.noClientsHint')}</p>}
           </div>
-          <Field label={t('proposals.titleField')} value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} placeholder={tf('proposals.titlePlaceholder', { name: selectedClient?.name || 'Client' })} />
+          <Field label="Proposal Title *" value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))}
+            placeholder={selectedClient ? `${selectedClient.name} Photography` : 'Wedding Photography Package'} />
+
           <div>
-            <label style={labelStyle}>{t('proposals.packageTemplate')}</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-              {PACKAGES.map(pkg => (
-                <button key={pkg.name} onClick={() => setForm(p => ({ ...p, packageName: pkg.name, packagePrice: String(pkg.price) }))} style={{
-                  padding: '6px 12px', borderRadius: 8, border: '1px solid', borderColor: form.packageName === pkg.name ? '#007AFF' : 'rgba(0,0,0,.1)',
-                  background: form.packageName === pkg.name ? 'rgba(0,122,255,.06)' : '#fff',
-                  color: form.packageName === pkg.name ? '#007AFF' : '#86868B', fontSize: 12, fontWeight: form.packageName === pkg.name ? 600 : 400, cursor: 'pointer',
-                }}>{pkg.name}<br/><span style={{ fontSize: 10 }}>${pkg.price}</span></button>
-              ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Package Options</label>
+              <button onClick={addPackage} style={{ padding: '4px 12px', borderRadius: 8, border: '1px dashed rgba(0,0,0,.15)', background: 'none', fontSize: 12, cursor: 'pointer', color: '#007AFF' }}>+ Add Package</button>
             </div>
+            {packages.map((pkg, i) => (
+              <div key={i} style={{ background: 'rgba(0,0,0,.02)', borderRadius: 10, padding: 12, marginBottom: 8, position: 'relative' }}>
+                {packages.length > 1 && (
+                  <button onClick={() => removePackage(i)} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#FF3B30', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input value={pkg.name} onChange={e => updatePackage(i, { name: e.target.value })} placeholder="Package name" style={{ flex: 2, ...inp }} />
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 10, top: 9, color: '#86868B', fontSize: 13 }}>$</span>
+                    <input value={pkg.price} onChange={e => updatePackage(i, { price: e.target.value })} placeholder="Price" type="number" style={{ ...inp, paddingLeft: 22 }} />
+                  </div>
+                </div>
+                <input value={pkg.includes} onChange={e => updatePackage(i, { includes: e.target.value })}
+                  placeholder="What's included? (comma separated)  e.g. Full day, 2 photographers, Album"
+                  style={inp} />
+              </div>
+            ))}
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Field label={t('proposals.price')} value={form.packagePrice} onChange={v => setForm(p => ({ ...p, packagePrice: v }))} placeholder="4500" type="number" />
-            <div style={{ flex: 1 }}><label style={labelStyle}>{t('proposals.includes')}</label><div style={{ fontSize: 12, color: '#86868B', padding: '9px 0' }}>{selectedPkg?.desc || '—'}</div></div>
-          </div>
-          <button onClick={goNext} style={primaryBtn}>{t('proposals.next')}</button>
+
+          <button onClick={goNext} style={primaryBtn}>Next →</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>{t('proposals.contractTerms')}</label>
-            <textarea value={form.contractTerms} onChange={e => setForm(p => ({ ...p, contractTerms: e.target.value }))} placeholder={t('proposals.contractPlaceholder')} rows={6} style={{ ...inputStyle, resize: 'vertical' }} />
+            <label style={labelStyle}>Contract Terms (optional)</label>
+            <textarea value={contractTerms} onChange={e => setContractTerms(e.target.value)}
+              placeholder="1. 50% retainer confirms the date.\n2. 25% due on shoot day.\n3. 25% due before delivery."
+              rows={6} style={{ ...inp, resize: 'vertical' }} />
           </div>
-          <div style={{ padding: 12, borderRadius: 10, background: 'rgba(0,0,0,.02)', fontSize: 12, lineHeight: 1.8 }}>
-            <div><strong>{t('proposals.summaryProposal')}:</strong> {form.title || '(untitled)'}</div>
-            <div><strong>{t('proposals.summaryClient')}:</strong> {selectedClient?.name || t('proposals.clientNone').replace('— ', '')}</div>
-            <div><strong>{t('proposals.summaryPackage')}:</strong> {form.packageName} · ${Number(form.packagePrice).toLocaleString()}</div>
+
+          <div style={{ padding: 12, borderRadius: 10, background: 'rgba(0,0,0,.02)', fontSize: 13, lineHeight: 2 }}>
+            <div><strong>Proposal:</strong> {form.title || '(untitled)'}</div>
+            <div><strong>Client:</strong> {selectedClient?.name || 'None'}</div>
+            <div><strong>Packages:</strong></div>
+            {packages.filter(p => p.name.trim()).map((p, i) => (
+              <div key={i} style={{ paddingLeft: 12, fontSize: 12 }}>• {p.name} — ${Number(p.price).toLocaleString()}</div>
+            ))}
           </div>
+
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setStep(1)} style={secondaryBtn}>{t('proposals.back')}</button>
+            <button onClick={() => setStep(1)} style={secondaryBtn}>← Back</button>
             <button onClick={handleSubmit} disabled={submitting} style={{ ...primaryBtn, flex: 2, background: submitting ? '#AEAEB2' : '#34C759' }}>
-              {submitting ? t('proposals.creating') : t('proposals.createBtn')}
+              {submitting ? 'Creating…' : '✅ Create Proposal'}
             </button>
           </div>
-          <p style={{ fontSize: 11, color: '#AEAEB2', textAlign: 'center' }}>{t('proposals.viewTip')}</p>
         </div>
       )}
     </div>
@@ -291,6 +318,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: { label: 
 
 const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#86868B', marginBottom: 4, letterSpacing: '.2px' };
 const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,.1)', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: 'rgba(0,0,0,.02)' };
+const inp: React.CSSProperties = inputStyle;
 const selectStyle: React.CSSProperties = { ...inputStyle };
 const primaryBtn: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 14, border: 'none', background: '#007AFF', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' };
 const secondaryBtn: React.CSSProperties = { flex: 1, padding: '12px', borderRadius: 14, border: '1px solid rgba(0,0,0,.1)', background: '#fff', color: '#1D1D1F', fontSize: 14, fontWeight: 500, cursor: 'pointer' };
