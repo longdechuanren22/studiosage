@@ -8,6 +8,7 @@ interface CreateInvoiceParams {
     }[];
     paymentSchedule: 'single' | 'three-phase';
     retainerLabel?: string;
+    invoiceId?: string;
 }
 interface StripeInvoiceResult {
     id: string;

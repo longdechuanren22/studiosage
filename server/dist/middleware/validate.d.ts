@@ -43,9 +43,9 @@ export declare const generateInvoiceSchema: z.ZodObject<{
     clientEmail: string;
     packageType: "wedding" | "portrait" | "event" | "commercial";
     amount: number;
+    notes?: string | undefined;
     currency?: string | undefined;
     paymentSchedule?: "single" | "three-phase" | undefined;
-    notes?: string | undefined;
     photographerName?: string | undefined;
     photographerEmail?: string | undefined;
 }>;

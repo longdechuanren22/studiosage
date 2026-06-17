@@ -25,6 +25,14 @@ export declare function classifyOffline(body: string, subject: string, clientCon
     stage?: string;
     packageType?: string;
 }): ClassifyResult;
+export declare function detectShootType(text: string): string | null;
+export interface ExtractedEntity {
+    type: 'date' | 'budget' | 'location' | 'guest_count' | 'hours' | 'requirement' | 'change' | 'question' | 'urgency';
+    value: string;
+    raw: string;
+    confidence: number;
+}
+export declare function extractEntities(body: string, subject: string): ExtractedEntity[];
 export declare function generateInvoiceOffline(params: GenerateInvoiceParams): {
     items: InvoiceItem[];
     subtotal: number;

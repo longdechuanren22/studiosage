@@ -36,12 +36,15 @@ export class StripeAdapter {
         const linkParams = new URLSearchParams({
             'line_items[0][price]': price.id,
             'line_items[0][quantity]': '1',
-            'metadata[client]': params.clientName,
-            'metadata[schedule]': params.paymentSchedule,
         });
-        if (params.retainerLabel) {
+        if (params.clientName)
+            linkParams.set('metadata[client]', params.clientName);
+        if (params.paymentSchedule)
+            linkParams.set('metadata[schedule]', params.paymentSchedule);
+        if (params.invoiceId)
+            linkParams.set('metadata[invoice_id]', params.invoiceId);
+        if (params.retainerLabel)
             linkParams.set('metadata[retainer]', params.retainerLabel);
-        }
         const link = await this.request('/payment_links', linkParams);
         return {
             id: link.id,

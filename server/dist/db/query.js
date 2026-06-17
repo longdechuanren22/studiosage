@@ -1,34 +1,12 @@
-import { getDb } from './schema.js';
-// Simple prepared-statement style wrapper over sql.js
+// Query helpers — better-sqlite3 (synchronous, crash-safe)
+import { getDb, backupDb } from './schema.js';
 export function queryAll(sql, params = []) {
-    const db = getDb();
-    const stmt = db.prepare(sql);
-    if (params.length > 0)
-        stmt.bind(params);
-    const results = [];
-    while (stmt.step()) {
-        results.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return results;
+    return (getDb().prepare(sql).all(...params) || []);
 }
 export function queryOne(sql, params = []) {
-    const db = getDb();
-    const stmt = db.prepare(sql);
-    if (params.length > 0)
-        stmt.bind(params);
-    let result;
-    if (stmt.step()) {
-        result = stmt.getAsObject();
-    }
-    stmt.free();
-    return result;
+    return (getDb().prepare(sql).get(...params) || null);
 }
 export function run(sql, params = []) {
-    const db = getDb();
-    const stmt = db.prepare(sql);
-    if (params.length > 0)
-        stmt.bind(params);
-    stmt.step();
-    stmt.free();
+    getDb().prepare(sql).run(...params);
+    backupDb();
 }
