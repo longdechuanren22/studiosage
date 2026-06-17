@@ -20,4 +20,9 @@ export default defineConfig({
   ],
   base: '/sage/',
   server: { proxy: { '/api': 'http://localhost:3001' } },
+  build: {
+    rollupOptions: {
+      external: ['@tauri-apps/api/core'],
+    },
+  },
 });
