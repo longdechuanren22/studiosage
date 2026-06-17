@@ -8,11 +8,12 @@ import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
 import Connect from './pages/Connect';
 import Invoices from './pages/Invoices';
-import Proposals from './pages/Proposals';
-import Calendar from './pages/Calendar';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import PortalProposal from './pages/PortalProposal';
+import PortalSelection from './pages/PortalSelection';
+import PortalReview from './pages/PortalReview';
+import Projects from './pages/Projects';
+import Landing from './pages/Landing';
 import ForgotPassword from './pages/ForgotPassword';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
@@ -22,12 +23,15 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         {/* Public routes — full screen, no navigation chrome */}
+        <Route path="/welcome" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
-        <Route path="/portal/proposal/:shareToken" element={<PortalProposal />} />
+        {/* Client portal — selection & review (public, token-based) */}
+        <Route path="/portal/selection/:shareToken" element={<PortalSelection />} />
+        <Route path="/portal/review/:shareToken" element={<PortalReview />} />
 
         {/* Protected app routes — Layout + auth required */}
         <Route path="*" element={
@@ -36,13 +40,11 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/clients" element={<Clients />} />
-                <Route path="/inbox" element={<Navigate to="/clients" replace />} />
+                <Route path="/projects" element={<Projects />} />
                 <Route path="/invoices" element={<Invoices />} />
-                <Route path="/proposals" element={<Proposals />} />
-                <Route path="/calendar" element={<Calendar />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/connect" element={<Connect />} />
+                <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>

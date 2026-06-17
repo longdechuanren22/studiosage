@@ -4,6 +4,7 @@ import { useUser } from '../contexts/UserContext';
 import { useDemo } from '../components/Layout';
 import { api } from '../utils/api';
 import { t, tf } from '../i18n';
+import { platform, desktopNotify } from '../utils/platform';
 
 interface DashboardData {
   stats: { pendingClients: number; newMessages: number; urgentCount: number; activeProjects: number; revenueThisMonth: number; };
@@ -41,6 +42,18 @@ export default function Dashboard() {
       es.addEventListener('message:replied', () => fetchData());
       es.addEventListener('invoice:updated', () => fetchData());
       es.addEventListener('client:updated', () => fetchData());
+      es.addEventListener('project:updated', (e: any) => {
+        fetchData();
+        if (platform.isDesktop()) {
+          try {
+            const d = JSON.parse(e.data);
+            const labels: Record<string, string> = {
+              selection: '选片中', editing: '精修中', review: '审核中', completed: '已完成', cancelled: '已取消',
+            };
+            desktopNotify('项目状态更新', `项目状态已变更为：${labels[d.status] || d.status}`);
+          } catch {}
+        }
+      });
       es.onerror = () => {
         es.close();
         reconnectDelay = Math.min(reconnectDelay * 2, 30000); // 1s→2s→4s...max 30s
@@ -155,7 +168,7 @@ export default function Dashboard() {
       {d && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
           <StatCard value={d.stats.pendingClients} label={t('dash.pendingReply')} color={d.stats.pendingClients > 0 ? '#FF9500' : '#AEAEB2'} onClick={() => navigate('/clients')} />
-          <StatCard value={d.stats.activeProjects} label={t('dash.activeProjects')} color="#007AFF" onClick={() => navigate('/clients')} />
+          <StatCard value={d.stats.activeProjects} label={t('dash.activeProjects')} color="#007AFF" onClick={() => navigate('/projects')} />
           <StatCard value={d.stats.newMessages} label={t('dash.newMsgs')} color={d.stats.newMessages > 0 ? '#007AFF' : '#AEAEB2'} onClick={() => navigate('/clients')} />
           <StatCard value={d.stats.revenueThisMonth > 0 ? `$${d.stats.revenueThisMonth.toLocaleString()}` : '$0'} label={t('dash.revenueMonth')} color={d.stats.revenueThisMonth > 0 ? '#34C759' : '#AEAEB2'} onClick={() => navigate('/invoices')} />
         </div>

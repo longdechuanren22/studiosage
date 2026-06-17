@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/dev/packages/api/schema.json",
+  "productName": "StudioSage",
+  "version": "0.1.0",
+  "identifier": "com.studiosage.desktop",
+  "build": {
+    "frontendDist": "../client/dist",
+    "devUrl": "http://localhost:5173/sage/",
+    "beforeDevCommand": "cd ../client && pnpm dev",
+    "beforeBuildCommand": "cd ../client && pnpm build"
+  },
+  "app": {
+    "title": "StudioSage",
+    "windows": [
+      {
+        "title": "StudioSage",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' https: http: data: tauri://localhost; connect-src 'self' http://localhost:3001 https: http: tauri://localhost; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "",
+    "category": "Photography",
+    "shortDescription": "Photography Workflow Manager",
+    "longDescription": "StudioSage — 选片→修图→交付 全流程管理"
+  },
+  "plugins": {
+    "notification": {
+      "all": true
+    },
+    "dialog": {
+      "all": true
+    },
+    "fs": {
+      "scope": ["**"]
+    }
+  }
+}

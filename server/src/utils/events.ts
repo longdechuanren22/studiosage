@@ -1,7 +1,7 @@
 // Simple event bus for SSE push notifications
 import { type Response } from 'express';
 
-type EventType = 'message:new' | 'message:replied' | 'invoice:updated' | 'client:updated';
+type EventType = 'message:new' | 'message:replied' | 'invoice:updated' | 'client:updated' | 'project:updated';
 
 interface Client {
   userId: string;
@@ -64,4 +64,8 @@ export function notifyInvoiceUpdated(userId: string, invoice: any): void {
 
 export function notifyClientUpdated(userId: string, clientId: string, stage: string): void {
   publish(userId, 'client:updated', { id: clientId, stage });
+}
+
+export function notifyProjectUpdated(userId: string, projectId: string, status: string): void {
+  publish(userId, 'project:updated', { id: projectId, status });
 }

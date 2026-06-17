@@ -5,9 +5,11 @@
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
     "dev:server": "cd server && pnpm dev",
     "dev:client": "cd client && pnpm dev",
+    "dev:desktop": "concurrently \"pnpm dev:server\" \"cd desktop && pnpm tauri dev\"",
     "build": "pnpm build:client && pnpm build:server",
     "build:server": "cd server && pnpm build",
     "build:client": "cd client && pnpm build",
+    "build:desktop": "pnpm build:client && cd desktop && pnpm tauri build",
     "start": "cd server && pnpm start"
   },
   "devDependencies": {

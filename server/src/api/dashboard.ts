@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
   const pendingClients  = queryOne("SELECT COUNT(DISTINCT client_id) as count FROM messages WHERE user_id = ? AND status = 'pending' AND category != 'spam' AND client_id IS NOT NULL", [userId]) as any;
   const newMessages     = queryOne("SELECT COUNT(*) as count FROM messages WHERE user_id = ? AND status = 'pending' AND category != 'spam'", [userId]) as any;
   const urgentCount     = queryOne("SELECT COUNT(*) as count FROM messages WHERE user_id = ? AND category = 'urgent' AND status = 'pending'", [userId]) as any;
-  const activeProjects  = queryOne("SELECT COUNT(*) as count FROM clients WHERE user_id = ? AND stage IN ('booked','shooting','production')", [userId]) as any;
+  const activeProjects  = queryOne("SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND status NOT IN ('completed','cancelled')", [userId]) as any;
 
   // Pipeline breakdown
   const pipelineRows = queryAll("SELECT stage, COUNT(*) as count FROM clients WHERE user_id = ? AND status != 'archived' GROUP BY stage", [userId]) as any[];

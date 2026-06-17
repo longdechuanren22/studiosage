@@ -378,7 +378,7 @@ function generateSmartReply(body: string, subject: string, stage: string, ctx?: 
 
 // Detect the type of photography shoot from email content
 // Expanded with 30+ genres from international photography community research
-function detectShootType(text: string): string | null {
+export function detectShootType(text: string): string | null {
   // ── Chinese patterns (QQ/163/126 mailboxes) ──
   if (/周岁|百天|满月|生日.*(拍|照|摄影|写真|聚会|派对|庆祝)/i.test(text) || /(拍|照|摄影).*生日/i.test(text) || /(拍|照|摄影).*(?:周岁|百天|满月)/i.test(text)) return 'birthday';
   if (/宝宝|婴儿|孩子|儿童|亲子|小孩|宝贝|萌宝/i.test(text)) return 'child';

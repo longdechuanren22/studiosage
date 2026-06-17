@@ -64,18 +64,49 @@ async function handleEvent(event: any) {
       }
       break;
     }
+
+    // ── Subscription lifecycle ──
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      const sub = event.data.object;
+      const userId = sub.metadata?.userId;
+      const priceId = sub.items?.data?.[0]?.price?.id;
+      const status = sub.status; // active, past_due, canceled, incomplete
+
+      if (userId && priceId) {
+        await initDb();
+        const plan = priceId === process.env.STRIPE_PRICE_PRO_ANNUAL ? 'pro_annual'
+          : priceId === process.env.STRIPE_PRICE_PRO ? 'pro'
+          : 'trial';
+
+        if (status === 'active' || status === 'trialing') {
+          run('UPDATE users SET plan = ?, stripe_subscription_id = ? WHERE id = ?',
+            [plan, sub.id, userId]);
+          console.log(`[Billing] User ${userId} upgraded to ${plan} (${status})`);
+        } else if (status === 'past_due') {
+          // Keep current plan but log
+          console.log(`[Billing] User ${userId} subscription past_due`);
+        } else if (status === 'canceled' || status === 'unpaid') {
+          run('UPDATE users SET plan = ?, stripe_subscription_id = NULL WHERE id = ?',
+            ['trial', userId]);
+          console.log(`[Billing] User ${userId} downgraded to trial (${status})`);
+        }
+      }
+      break;
+    }
+
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object;
+      const userId = sub.metadata?.userId;
+      if (userId) {
+        await initDb();
+        run('UPDATE users SET plan = ?, stripe_subscription_id = NULL WHERE id = ?',
+          ['trial', userId]);
+        console.log(`[Billing] User ${userId} subscription deleted → trial`);
+      }
+      break;
+    }
   }
 }
-
-// Pixieset webhook — gallery status updates
-router.post('/pixieset', async (req, res) => {
-  const { event, gallery } = req.body;
-  if (event === 'gallery.published' && gallery?.id) {
-    await initDb();
-    run('UPDATE clients SET metadata = ? WHERE pixieset_gallery_id = ?',
-      [JSON.stringify({ galleryPublished: new Date().toISOString() }), gallery.id]);
-  }
-  res.json({ received: true });
-});
 
 export { router as webhookRoutes };

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StudioSage</title>
+  <style>
+    /* Prevent white flash during load */
+    html, body { margin: 0; padding: 0; background: #f5f5f7; }
+    #root { min-height: 100vh; }
+    /* Tauri drag region for custom title bar (future) */
+    .titlebar { -webkit-app-region: drag; }
+    .titlebar button { -webkit-app-region: no-drag; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- In dev mode, Tauri loads from Vite dev server (see tauri.conf.json devUrl) -->
+  <!-- In production, Tauri loads from client/dist (see tauri.conf.json frontendDist) -->
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

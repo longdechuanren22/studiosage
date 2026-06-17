@@ -3,15 +3,34 @@ services:
   studiosage:
     build: .
     ports:
-      - "3001:3001"
+      - "${PORT:-3001}:3001"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - PIXIESET_API_KEY=${PIXIESET_API_KEY:-}
+      - PORT=3001
+      - NODE_ENV=production
+      # AI
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      # Stripe
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO:-}
+      - STRIPE_PRICE_STUDIO=${STRIPE_PRICE_STUDIO:-}
+      # R2 Storage (optional — falls back to local if not set)
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
+      - R2_SECRET_KEY=${R2_SECRET_KEY:-}
+      - R2_BUCKET=${R2_BUCKET:-studiosage}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL:-}
+      # App
+      - APP_URL=${APP_URL:-https://studiosa.ge}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - CLIENT_JWT_SECRET=${CLIENT_JWT_SECRET:-change-me-too}
+      # Optional integrations
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - PIXIESET_API_KEY=${PIXIESET_API_KEY:-}
     volumes:
-      - studiosage_data:/app/data
+      - studiosage_data:/app/server/data
     restart: unless-stopped
 
 volumes:

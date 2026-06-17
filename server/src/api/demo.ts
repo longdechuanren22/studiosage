@@ -23,7 +23,7 @@ const DEMO_MESSAGES = [
     body: "Emma, I can't access the gallery. The password isn't working and my wedding is literally tomorrow! Please help ASAP!",
     category: "urgent",
     stage: "delivery",
-    aiReply: "David, I'm so sorry about this! Let me reset your gallery password right away. Your new password is: SarahMike2024! Here's the direct link: https://pixieset.com/gallery/sarah-mike-wedding. Please try now and let me know if you have any issues. I'm here for you!",
+    aiReply: "David, I'm so sorry about this! Let me reset your gallery password right away. Your new password is: SarahMike2024! Here's the direct link: /sage/portal/selection/demo-token. Please try now and let me know if you have any issues. I'm here for you!",
     clientName: "David L.",
     clientStage: "delivery",
   },

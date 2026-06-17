@@ -418,6 +418,4 @@ const quickProviders = [
 const otherIntegrations = [
   { key: 'ai', icon: '🤖', label: 'AI 引擎', desc: 'DeepSeek / Claude' },
   { key: 'stripe', icon: '💳', label: 'Stripe', desc: '在线收款 + 发票' },
-  { key: 'pixieset', icon: '🖼️', label: 'Pixieset', desc: '客户画廊交付' },
-  { key: 'googleCalendar', icon: '📅', label: 'Google Calendar', desc: '日程同步' },
 ];

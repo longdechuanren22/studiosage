@@ -4,9 +4,6 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// Note: uncaughtException handler is set in db/schema.ts (handles DB flush)
-
-// Load .env from project root
 import dotenv from 'dotenv';
 dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.env') });
 import { initDb } from './db/schema.js';
@@ -18,17 +15,15 @@ import { dashboardRoutes } from './api/dashboard.js';
 import { settingsRoutes } from './api/settings.js';
 import { clientRoutes } from './api/clients.js';
 import { webhookRoutes } from './api/webhooks.js';
-import { oauthRoutes } from './api/oauth.js';
 import { healthRoutes } from './api/health.js';
 import { demoRoutes } from './api/demo.js';
-import { deployRoutes } from './api/deploy.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
 import { securityHeaders, apiLimiter, authLimiter } from './middleware/security.js';
 import { emailConnectRoutes } from './api/email-connect.js';
-import { proposalRoutes } from './api/proposals.js';
 import { portalRoutes } from './api/portal.js';
-import { calendarRoutes } from './api/calendar.js';
-import { galleryRoutes } from './api/galleries.js';
+import { projectRoutes } from './api/projects.js';
+import { galleryDeliveryRoutes } from './api/gallery-delivery.js';
+import { billingRoutes } from './api/billing.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
@@ -64,19 +59,22 @@ app.use(apiLimiter);
 app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json({ limit: '1mb' }));
 
+// ── Static file serving for uploaded photos ──
+const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
+
 // ── Public routes (no auth required) ──
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/webhooks', webhookRoutes);
-app.use('/api/oauth', oauthRoutes);
-app.use('/api/deploy', deployRoutes);
 app.use('/api/demo', demoRoutes);
-app.use('/api/portal', portalRoutes);              // client portal — token-based (提案查看/接受/消息/发票)
+app.use('/api/portal', portalRoutes);  // client portal — 选片/审核/消息/发票
 
 // ── Protected routes (JWT required) ──
 app.use('/api/messages', authenticate, messageRoutes);
 app.use('/api/invoices', authenticate, invoiceRoutes);
-// SSE stream — token via query param (EventSource can't set headers)
+// SSE stream — token via query param
 app.get('/api/dashboard/stream', async (req, res) => {
   const token = req.query.token as string;
   if (!token) { res.status(401).json({ error: 'Missing token' }); return; }
@@ -93,9 +91,9 @@ app.use('/api/dashboard', authenticate, dashboardRoutes);
 app.use('/api/settings', authenticate, settingsRoutes);
 app.use('/api/clients', authenticate, clientRoutes);
 app.use('/api/email', authenticate, emailConnectRoutes);
-app.use('/api/proposals', authenticate, proposalRoutes);
-app.use('/api/calendar', authenticate, calendarRoutes);
-app.use('/api/galleries', authenticate, galleryRoutes);
+app.use('/api/projects', authenticate, projectRoutes);
+app.use('/api/projects', authenticate, galleryDeliveryRoutes);
+app.use('/api/billing', billingRoutes);
 
 // Serve client build in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

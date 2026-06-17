@@ -25,9 +25,6 @@ router.get('/', async (req, res) => {
   res.json({
     ai: { configured: !!(process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY), ...getAIStatus() },
     email: { connected: emailConnected, email: emailProvider, autoReply },
-    google: { configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) },
-    gmail: { connected: !!process.env.GOOGLE_ACCESS_TOKEN },
-    pixieset: { configured: !!process.env.PIXIESET_API_KEY },
     stripe: { configured: !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'sk_test_placeholder') },
     setupComplete: !!(
       (process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY) &&

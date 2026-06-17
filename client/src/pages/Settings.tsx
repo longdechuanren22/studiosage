@@ -61,14 +61,6 @@ export default function Settings() {
       active: status?.stripe?.configured,
       activeLabel: 'Active', inactiveLabel: 'Coming Soon',
     },
-    {
-      key: 'pixieset', icon: '🖼', label: 'Gallery Delivery',
-      desc: status?.pixieset?.configured
-        ? 'Pixieset galleries are ready for client delivery.'
-        : 'Gallery integration coming soon.',
-      active: status?.pixieset?.configured,
-      activeLabel: 'Active', inactiveLabel: 'Coming Soon',
-    },
   ];
 
   return (
