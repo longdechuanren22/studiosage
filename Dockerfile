@@ -1,7 +1,6 @@
 FROM node:22-alpine AS client-builder
 WORKDIR /app/client
-COPY client/package.json client/pnpm-lock.yaml ./
-COPY pnpm-workspace.yaml ./
+COPY client/package.json client/pnpm-lock.yaml client/.npmrc ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY client/ .
 RUN pnpm build
@@ -9,7 +8,7 @@ RUN pnpm build
 FROM node:22-alpine AS server-builder
 WORKDIR /app/server
 RUN apk add --no-cache python3 make g++  # sharp native build
-COPY server/package.json server/pnpm-lock.yaml ../pnpm-workspace.yaml ./
+COPY server/package.json server/pnpm-lock.yaml server/.npmrc ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY server/ .
 RUN pnpm build
