@@ -7,8 +7,7 @@ import { api } from '../utils/api';
 import { useI18n } from '../i18n';
 
 interface SetupStatus {
-  ai: { configured: boolean }; pixieset: { configured: boolean };
-  google: { configured: boolean }; stripe: { configured: boolean };
+  ai: { configured: boolean }; stripe: { configured: boolean };
   email: { connected: boolean; email?: string; autoReply?: boolean };
   setupComplete: boolean;
 }
@@ -28,7 +27,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (demo) {
-      setStatus({ ai: { configured: false }, pixieset: { configured: false }, google: { configured: false }, stripe: { configured: false }, email: { connected: false }, setupComplete: false });
+      setStatus({ ai: { configured: false }, stripe: { configured: false }, email: { connected: false }, setupComplete: false });
       return;
     }
     api.get<SetupStatus>('/api/settings').then(s => {

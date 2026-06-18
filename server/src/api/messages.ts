@@ -61,17 +61,7 @@ router.post('/incoming', async (req, res) => {
      classification.category, isSpam ? 'archived' : 'pending',
      isSpam ? '' : classification.suggestedReply, new Date().toISOString()]);
 
-  // Extract entities and store insights
-  const entities = extractEntities(body, subject || '');
-  for (const entity of entities) {
-    run(
-      `INSERT INTO client_insights (id, user_id, client_id, message_id, type, value, raw_text)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), userId, clientId || null, id, entity.type, entity.value, entity.raw]
-    );
-  }
-
-  res.json({ id, ...classification, isSpam, entities: entities.length });
+  res.json({ id, ...classification, isSpam });
 });
 
 // Update AI reply (user edits the draft)

@@ -134,17 +134,19 @@ router.get('/:id/timeline', async (req, res) => {
     `SELECT 'message' as type, id, subject as title, status, created_at FROM messages WHERE client_id = ? AND user_id = ? AND category != 'spam' ORDER BY created_at DESC LIMIT 20`,
     [req.params.id, userId]
   );
-  const proposals = queryAll(
-    `SELECT 'proposal' as type, id, title, status, created_at FROM proposals WHERE client_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10`,
-    [req.params.id, userId]
-  );
   const invoices = queryAll(
     `SELECT 'invoice' as type, id, description as title, status, amount, created_at FROM invoices WHERE client_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10`,
     [req.params.id, userId]
   );
 
+  // Get projects for this client
+  const projects = queryAll(
+    `SELECT 'project' as type, id, title, status, created_at FROM projects WHERE client_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10`,
+    [req.params.id, userId]
+  );
+
   // Merge and sort by created_at DESC
-  const timeline = [...(messages as any[]), ...(proposals as any[]), ...(invoices as any[])]
+  const timeline = [...(messages as any[]), ...(projects as any[]), ...(invoices as any[])]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 30);
 

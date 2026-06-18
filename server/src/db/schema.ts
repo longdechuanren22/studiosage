@@ -75,7 +75,9 @@ function runMigrations(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, google_id TEXT UNIQUE,
-      plan TEXT DEFAULT 'trial', password_hash TEXT, created_at TEXT DEFAULT (datetime('now'))
+      plan TEXT DEFAULT 'trial', password_hash TEXT,
+      stripe_customer_id TEXT, stripe_subscription_id TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
     );
     INSERT OR IGNORE INTO users (id, email, name, plan) VALUES ('default', 'default@local', 'Default', 'trial');
 
@@ -169,6 +171,8 @@ function runMigrations(db: Database.Database) {
   addCol('messages', 'thread_id', "TEXT DEFAULT NULL");
   addCol('messages', 'imap_uid', 'TEXT');
   addCol('users', 'password_hash', 'TEXT');
+  addCol('users', 'stripe_customer_id', 'TEXT');
+  addCol('users', 'stripe_subscription_id', 'TEXT');
   addCol('delivery_rounds', 'share_token', 'TEXT');
 
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch {}

@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
       c.id as client_id, c.name as client_name, c.stage, c.type,
       c.updated_at as client_updated_at,
       (SELECT COUNT(*) FROM messages WHERE client_id = c.id AND status = 'pending' AND category != 'spam') as pending,
-      (SELECT COUNT(*) FROM proposals WHERE client_id = c.id AND status = 'sent') as pending_proposals,
+      (SELECT COUNT(*) FROM projects WHERE client_id = c.id AND status NOT IN ('completed','cancelled')) as active_projects,
       (SELECT COUNT(*) FROM invoices WHERE client_id = c.id AND status = 'sent') as unpaid_invoices,
       (SELECT subject FROM messages WHERE client_id = c.id AND category != 'spam' ORDER BY created_at DESC LIMIT 1) as last_subject,
       (SELECT MAX(created_at) FROM messages WHERE client_id = c.id AND category != 'spam') as last_message_at,
@@ -44,7 +44,7 @@ router.get('/', async (req, res) => {
     ...item,
     needsAction: item.pending > 0,
     actionLabel: item.pending > 0 ? 'needs_reply'
-      : item.pending_proposals > 0 ? 'proposal_pending'
+      : item.active_projects > 0 ? 'active_project'
       : item.unpaid_invoices > 0 ? 'payment_due'
       : 'recently_active',
   }));
@@ -56,17 +56,6 @@ router.get('/', async (req, res) => {
     AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
   `, [userId]) as any;
 
-  // Recent insights (extracted key info from client messages — last 10)
-  const recentInsights = queryAll(`
-    SELECT ci.type, ci.value, ci.raw_text, ci.created_at,
-           c.id as client_id, c.name as client_name
-    FROM client_insights ci
-    LEFT JOIN clients c ON ci.client_id = c.id
-    WHERE ci.user_id = ?
-    ORDER BY ci.created_at DESC
-    LIMIT 10
-  `, [userId]);
-
   res.json({
     stats: {
       pendingClients: pendingClients?.count || 0,
@@ -77,7 +66,6 @@ router.get('/', async (req, res) => {
     },
     pipeline,
     recentActivity: enriched,
-    insights: recentInsights,
   });
 });
 

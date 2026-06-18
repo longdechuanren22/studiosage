@@ -68,8 +68,8 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
             run("UPDATE clients SET stage='engaged', updated_at=datetime('now') WHERE id=?", [clientId]);
             try { notifyClientUpdated(uid, clientId, 'engaged'); } catch {}
           }
-        } catch {
-          // AI unavailable → just store as normal
+        } catch (err) {
+          console.warn('[EmailWatcher] AI classification failed:', (err as Error).message);
         }
 
         const msgId = randomUUID();

@@ -78,13 +78,15 @@ router.get('/:id', async (req, res) => {
     [p.id]
   );
 
-  // Get linked proposal if exists
+  // Get linked proposal if exists (table may not exist after cleanup)
   let proposal = null;
   if (p.proposal_id) {
-    proposal = queryOne(
-      `SELECT id, title, packages, pricing, status FROM proposals WHERE id = ? AND user_id = ?`,
-      [p.proposal_id, userId]
-    );
+    try {
+      proposal = queryOne(
+        `SELECT id, title, packages, pricing, status FROM proposals WHERE id = ? AND user_id = ?`,
+        [p.proposal_id, userId]
+      );
+    } catch { /* proposals table removed */ }
   }
 
   res.json({
@@ -123,19 +125,20 @@ router.post('/', checkProjectLimit, async (req, res) => {
   let maxRetouch = defaults.retouch;
   let maxRevisions = defaults.revisions;
   if (proposalId) {
-    const proposal = queryOne('SELECT packages FROM proposals WHERE id = ? AND user_id = ?', [proposalId, userId]) as any;
-    if (proposal) {
-      const packages = JSON.parse(proposal.packages || '[]');
-      const selectedPkg = packages.find((pkg: any) => pkg.name === packageType);
-      if (selectedPkg?.includes) {
-        // Try to extract retouch count and revision rounds from package includes
-        const includes = selectedPkg.includes.join(' ').toLowerCase();
-        const retouchMatch = includes.match(/(\d+)\s*(?:edited|retouched|精修|张)/);
-        const revisionMatch = includes.match(/(\d+)\s*(?:round|轮|revision)/);
-        if (retouchMatch) maxRetouch = parseInt(retouchMatch[1]);
-        if (revisionMatch) maxRevisions = parseInt(revisionMatch[1]);
+    try {
+      const proposal = queryOne('SELECT packages FROM proposals WHERE id = ? AND user_id = ?', [proposalId, userId]) as any;
+      if (proposal) {
+        const packages = JSON.parse(proposal.packages || '[]');
+        const selectedPkg = packages.find((pkg: any) => pkg.name === packageType);
+        if (selectedPkg?.includes) {
+          const includes = selectedPkg.includes.join(' ').toLowerCase();
+          const retouchMatch = includes.match(/(\d+)\s*(?:edited|retouched|精修|张)/);
+          const revisionMatch = includes.match(/(\d+)\s*(?:round|轮|revision)/);
+          if (retouchMatch) maxRetouch = parseInt(retouchMatch[1]);
+          if (revisionMatch) maxRevisions = parseInt(revisionMatch[1]);
+        }
       }
-    }
+    } catch { /* proposals table removed — use defaults */ }
   }
 
   const id = randomUUID();

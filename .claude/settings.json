@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(git *)",
+      "Bash(curl *)",
+      "Bash(ssh -i ~/.ssh/id_ed25519 *)",
+      "Bash(docker *)",
+      "Bash(sudo docker *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(grep *)",
+      "Bash(wc *)",
+      "Bash(mkdir *)",
+      "Bash(rm *)",
+      "Bash(cp *)",
+      "Bash(tar *)",
+      "Bash(echo *)",
+      "Bash(df *)",
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(openssl *)",
+      "WebSearch",
+      "WebFetch"
+    ]
+  }
+}
