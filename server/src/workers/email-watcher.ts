@@ -1,8 +1,10 @@
-// Background worker: poll IMAP inbox → store messages (passive only, no auto-reply)
+// Background worker: poll IMAP inbox → AI classify → draft reply (human approves before send)
 import { randomUUID } from 'node:crypto';
-import { fetchRecentMessages, type EmailConfig } from '../adapters/email.js';
+import { fetchRecentMessages, sendReply, type EmailConfig } from '../adapters/email.js';
+import { classifyMessage } from '../ai/engine.js';
 import { initDb } from '../db/schema.js';
 import { queryOne, run } from '../db/query.js';
+import { notifyMessage, notifyClientUpdated } from '../utils/events.js';
 
 let running = false;
 let polling = false;
@@ -34,10 +36,12 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
 
         // Find or create client
         let clientId: string | null = null;
+        let clientStage = 'inquiry';
         if (fromEmail) {
-          const client = queryOne('SELECT id FROM clients WHERE user_id = ? AND email = ?', [uid, fromEmail]) as any;
+          const client = queryOne('SELECT id, stage FROM clients WHERE user_id = ? AND email = ?', [uid, fromEmail]) as any;
           if (client) {
             clientId = client.id;
+            clientStage = client.stage || 'inquiry';
             run("UPDATE clients SET updated_at=datetime('now') WHERE id=?", [client.id]);
           } else {
             clientId = randomUUID();
@@ -48,14 +52,42 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
           }
         }
 
+        // ── AI classification + draft reply ──
+        let category = 'normal';
+        let aiReply = '';
+        try {
+          const result = await classifyMessage(
+            cleanBody.slice(0, 2000),
+            msg.subject || '',
+            { name: extractName(msg.from || ''), stage: clientStage }
+          );
+          category = result.category;
+          aiReply = result.suggestedReply || '';
+          // Auto-promote inquiry → engaged on first real message
+          if (clientStage === 'inquiry' && category !== 'spam' && clientId) {
+            run("UPDATE clients SET stage='engaged', updated_at=datetime('now') WHERE id=?", [clientId]);
+            try { notifyClientUpdated(uid, clientId, 'engaged'); } catch {}
+          }
+        } catch {
+          // AI unavailable → just store as normal
+        }
+
+        const msgId = randomUUID();
         run(
-          `INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, status, channel, stage_at_time, imap_uid, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'normal', 'pending', 'email', 'inquiry', ?, datetime('now'))`,
-          [randomUUID(), uid, clientId, msg.from || '', msg.subject || '', cleanBody.slice(0, 5000), msg.id]
+          `INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, ai_reply, status, channel, stage_at_time, imap_uid, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'email', ?, ?, datetime('now'))`,
+          [msgId, uid, clientId, msg.from || '', msg.subject || '', cleanBody.slice(0, 5000),
+           category, aiReply.slice(0, 2000), clientStage, msg.id]
         );
+
+        // SSE push to Dashboard
+        try {
+          notifyMessage(uid, { id: msgId, from_address: msg.from, subject: msg.subject, client_id: clientId, category, status: 'pending' });
+        } catch {}
+
         newCount++;
       }
-      if (newCount > 0) console.log(`[EmailWatcher] ${newCount} new messages for ${cfg.email}`);
+      if (newCount > 0) console.log(`[EmailWatcher] ${newCount} new messages → AI classified + drafted replies`);
     } catch (err) {
       console.error('[EmailWatcher] Poll error:', (err as Error).message);
     } finally {
@@ -63,9 +95,9 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
     }
   };
 
-  poll(); // Initial poll
+  poll();
   setInterval(poll, intervalMs);
-  console.log('[EmailWatcher] Started (passive mode)');
+  console.log('[EmailWatcher] Started (AI classify + draft, human-approved send)');
 }
 
 function extractEmail(from: string): string {
