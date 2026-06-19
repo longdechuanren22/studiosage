@@ -64,26 +64,88 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 60000, us
             );
             category = result.category;
             aiReply = result.suggestedReply || '';
-            // Auto-promote inquiry → engaged on first real message
-            if (clientStage === 'inquiry' && category !== 'spam' && clientId) {
-              run("UPDATE clients SET stage='engaged', updated_at=datetime('now') WHERE id=?", [clientId]);
-              try { notifyClientUpdated(uid, clientId, 'engaged'); } catch {}
-            }
           } catch (err) {
             console.warn('[EmailWatcher] AI classification failed:', (err as Error).message);
           }
 
+          // 🔒 Skip spam entirely — don't store, don't notify
+          if (category === 'spam') {
+            console.log('[EmailWatcher] Spam filtered:', msg.subject);
+            continue;
+          }
+
+          // Auto-promote inquiry → engaged on first real message
+          if (clientStage === 'inquiry' && clientId) {
+            run("UPDATE clients SET stage='engaged', updated_at=datetime('now') WHERE id=?", [clientId]);
+            try { notifyClientUpdated(uid, clientId, 'engaged'); } catch {}
+          }
+
+          // ── AI 实体提取 → 自动补全客户档案 ──
+          try {
+            const { extractEntities } = await import('../ai/rules-engine.js');
+            const entities = extractEntities(cleanBody, msg.subject || '');
+            if (entities.length > 0 && clientId) {
+              const client = queryOne('SELECT * FROM clients WHERE id = ?', [clientId]) as any;
+              for (const entity of entities) {
+                switch (entity.type) {
+                  case 'date':
+                    // Auto-set shoot_date if not already set
+                    if (!client?.shoot_date && entity.value) {
+                      run("UPDATE clients SET shoot_date=?, updated_at=datetime('now') WHERE id=?", [entity.value, clientId]);
+                    }
+                    break;
+                  case 'budget':
+                    if (!client?.metadata || !JSON.parse(client.metadata || '{}').budget) {
+                      const meta = JSON.parse(client?.metadata || '{}');
+                      meta.budget = entity.value;
+                      run("UPDATE clients SET metadata=?, updated_at=datetime('now') WHERE id=?", [JSON.stringify(meta), clientId]);
+                    }
+                    break;
+                  case 'location':
+                    if (!client?.metadata || !JSON.parse(client.metadata || '{}').location) {
+                      const meta = JSON.parse(client?.metadata || '{}');
+                      meta.location = entity.value;
+                      run("UPDATE clients SET metadata=?, updated_at=datetime('now') WHERE id=?", [JSON.stringify(meta), clientId]);
+                    }
+                    break;
+                  case 'guest_count':
+                  case 'hours':
+                  case 'requirement':
+                    // Store in metadata as structured info
+                    const meta = JSON.parse(client?.metadata || '{}');
+                    if (!meta[entity.type]) {
+                      meta[entity.type] = entity.value;
+                      run("UPDATE clients SET metadata=?, updated_at=datetime('now') WHERE id=?", [JSON.stringify(meta), clientId]);
+                    }
+                    break;
+                }
+                // Auto-detect shoot type from message content
+                if (entity.type === 'requirement' && client && !client.type) {
+                  const { detectShootType } = await import('../ai/rules-engine.js');
+                  const detectedType = detectShootType(cleanBody.toLowerCase());
+                  if (detectedType) {
+                    run("UPDATE clients SET type=?, updated_at=datetime('now') WHERE id=?", [detectedType, clientId]);
+                  }
+                }
+              }
+              if (entities.length > 0) console.log('[EmailWatcher] Extracted', entities.length, 'entities for client', fromEmail);
+            }
+          } catch (err) {
+            // Entity extraction is non-critical
+          }
+
           const msgId = randomUUID();
+          const msgStatus = category === 'spam' ? 'archived' : 'pending';
           run(
             `INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, ai_reply, status, channel, stage_at_time, imap_uid, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'email', ?, ?, datetime('now'))`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'email', ?, ?, datetime('now'))`,
             [msgId, uid, clientId, msg.from || '', msg.subject || '', cleanBody.slice(0, 5000),
-             category, aiReply.slice(0, 2000), clientStage, msg.id]
+             category, aiReply.slice(0, 2000), msgStatus, clientStage, msg.id]
           );
 
-          // SSE push to Dashboard
+          // SSE push to Dashboard (skip spam)
           try {
-            notifyMessage(uid, { id: msgId, from_address: msg.from, subject: msg.subject, client_id: clientId, category, status: 'pending' });
+            notifyMessage(uid, { id: msgId, from_address: msg.from, subject: msg.subject, client_id: clientId, category, status: msgStatus });
           } catch {}
 
           newCount++;

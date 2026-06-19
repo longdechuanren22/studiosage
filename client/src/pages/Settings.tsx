@@ -53,12 +53,12 @@ export default function Settings() {
       activeLabel: 'Active', inactiveLabel: 'Offline Mode',
     },
     {
-      key: 'stripe', icon: '💳', label: 'Online Payments',
+      key: 'subscription', icon: '💳', label: 'Subscription',
       desc: status?.stripe?.configured
-        ? 'Stripe payments are active. Send invoices and accept cards.'
-        : 'Payment processing is being configured. Invoice PDFs still work.',
+        ? 'Manage your StudioSage plan and billing.'
+        : 'Stripe is being configured.',
       active: status?.stripe?.configured,
-      activeLabel: 'Active', inactiveLabel: 'Coming Soon',
+      activeLabel: 'Active', inactiveLabel: 'Setup Required',
     },
   ];
 

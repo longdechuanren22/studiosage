@@ -99,8 +99,9 @@ app.use('/api/billing', billingRoutes);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
-  app.get('*', (_req, res, next) => { try { res.sendFile(path.join(clientDist, 'index.html')); } catch { next(); } });
+  app.use('/sage', express.static(clientDist));
+  app.get('/sage/*', (_req, res) => { res.sendFile(path.join(clientDist, 'index.html')); });
+  app.get('/', (_req, res) => { res.redirect('/sage/'); });
 }
 
 app.use(notFound);
