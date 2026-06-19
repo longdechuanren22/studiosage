@@ -269,11 +269,41 @@ router.patch('/:id/gallery/send', async (req, res) => {
 
   const shareUrl = `/portal/selection/${shareToken}`;
 
+  // 📬 自动起草选片通知邮件 → 直接发送给客户
+  const client = queryOne('SELECT name, email FROM clients WHERE id = ?', [project.client_id]) as any;
+  let notificationSent = false;
+  if (client?.email) {
+    try {
+      const { draftNotification } = await import('../utils/notifications.js');
+      const { sendReply } = await import('../adapters/email.js');
+      const { decrypt } = await import('../utils/crypto.js');
+      const conn = queryOne("SELECT * FROM tool_connections WHERE user_id = ? AND tool_id = 'email_imap' AND status = 'active' LIMIT 1", [userId]) as any;
+      if (conn) {
+        const cfg = JSON.parse(conn.access_token_encrypted || '{}');
+        const password = conn.refresh_token_encrypted ? decrypt(conn.refresh_token_encrypted) : '';
+        const draft = await draftNotification('gallery_sent', {
+          clientName: client.name || client.email,
+          clientEmail: client.email,
+          projectTitle: project.title || 'Project',
+          details: `${photos.length} photos, deadline ${new Date(deadline).toLocaleDateString()}`,
+          shareUrl: `${process.env.APP_URL || 'http://localhost:3001'}${shareUrl}`,
+          deadline: new Date(deadline).toLocaleDateString(),
+        });
+        await sendReply({ ...cfg, password }, client.email, draft.subject, draft.body);
+        notificationSent = true;
+        console.log(`[Gallery] 📬 Auto-sent selection invite to ${client.email}`);
+      }
+    } catch (err) {
+      console.warn('[Gallery] Failed to auto-send notification:', (err as Error).message);
+    }
+  }
+
   res.json({
     shareToken,
     shareUrl,
     selectionDeadline: deadline,
     photoCount: photos.length,
+    notificationSent,
   });
 });
 
@@ -409,12 +439,42 @@ router.post('/:id/deliveries', async (req, res) => {
       // Update project status to review
       run("UPDATE projects SET status='review', updated_at=datetime('now') WHERE id=?", [project.id]);
 
+      // 📬 自动起草审核通知邮件 → 发送给客户
+      let deliveryNotified = false;
+      try {
+        const client = queryOne('SELECT name, email FROM clients WHERE id = ?', [project.client_id]) as any;
+        if (client?.email) {
+          const { draftNotification } = await import('../utils/notifications.js');
+          const { sendReply } = await import('../adapters/email.js');
+          const { decrypt } = await import('../utils/crypto.js');
+          const conn = queryOne("SELECT * FROM tool_connections WHERE user_id = ? AND tool_id = 'email_imap' AND status = 'active' LIMIT 1", [userId]) as any;
+          if (conn) {
+            const cfg = JSON.parse(conn.access_token_encrypted || '{}');
+            const password = conn.refresh_token_encrypted ? decrypt(conn.refresh_token_encrypted) : '';
+            const roundData = queryOne('SELECT share_token FROM delivery_rounds WHERE id = ?', [roundId]) as any;
+            const reviewUrl = roundData?.share_token ? `${process.env.APP_URL || 'http://localhost:3001'}/portal/review/${roundData.share_token}` : '';
+            const draft = await draftNotification('delivery_ready', {
+              clientName: client.name || client.email,
+              clientEmail: client.email,
+              projectTitle: (queryOne('SELECT title FROM projects WHERE id=?', [project.id]) as any)?.title || 'Project',
+              details: `Round ${roundNumber}, ${allPhotos.length} photos`,
+              shareUrl: reviewUrl,
+              deadline: new Date(Date.now() + 3*24*60*60*1000).toLocaleDateString(),
+              roundNumber,
+            });
+            await sendReply({ ...cfg, password }, client.email, draft.subject, draft.body);
+            deliveryNotified = true;
+          }
+        }
+      } catch {}
+
       res.status(201).json({
         roundId,
         roundNumber,
         added: newPhotos.length,
         total: allPhotos.length,
         reviewDeadline,
+        deliveryNotified,
       });
     } finally {
       uploadLocks.delete(req.params.id);

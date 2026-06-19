@@ -302,7 +302,38 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
   // Initial run
   runOnce();
   interval = setInterval(runOnce, intervalMs);
-  console.log(`[EmailWatcher] ✅ Polling started — ${intervalMs}ms interval`);
+
+  // ⏰ 截止日检查器 — 每5分钟扫描一次，自动发送提醒
+  const deadlineCheck = async () => {
+    try {
+      const { checkDeadlines } = await import('../utils/notifications.js');
+      const { sendReply } = await import('../adapters/email.js');
+      const { decrypt } = await import('../utils/crypto.js');
+      const { queryOne, run } = await import('../db/query.js');
+      const jobs = await checkDeadlines();
+      for (const job of jobs) {
+        // 获取任意一个已连接的邮箱来发送
+        const conn = queryOne("SELECT * FROM tool_connections WHERE user_id = ? AND tool_id = 'email_imap' AND status = 'active' LIMIT 1", [uid]);
+        if (!conn) continue;
+        const cfgData = conn as any;
+        const cfg = JSON.parse(cfgData.access_token_encrypted || '{}');
+        const password = cfgData.refresh_token_encrypted ? decrypt(cfgData.refresh_token_encrypted) : '';
+        try {
+          await sendReply({ ...cfg, password }, job.clientEmail, job.subject, job.body);
+          console.log(`[Notification] ✅ Auto-sent: ${job.type} → ${job.clientEmail}`);
+        } catch (err) {
+          console.warn(`[Notification] Failed to send ${job.type}:`, (err as Error).message);
+        }
+      }
+      if (jobs.length > 0) console.log(`[Notification] 📬 Auto-sent ${jobs.length} deadline reminder(s)`);
+    } catch (err) {
+      // Deadline check is non-critical
+    }
+  };
+  setInterval(deadlineCheck, 300000); // Every 5 minutes
+  deadlineCheck(); // Run immediately on start
+
+  console.log(`[EmailWatcher] ✅ Polling started — ${intervalMs}ms + deadline checker (5min)`);
 }
 
 export function stopEmailWatcher(): void {
