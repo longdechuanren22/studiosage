@@ -5,12 +5,14 @@ import { authenticate } from '../middleware/auth.js';
 
 const router: RouterType = Router();
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || '';
-const STRIPE_PRICE_PRO = process.env.STRIPE_PRICE_PRO || '';        // $19/mo
+const STRIPE_PRICE_PRO = process.env.STRIPE_PRICE_PRO || '';            // $19/mo
 const STRIPE_PRICE_PRO_ANNUAL = process.env.STRIPE_PRICE_PRO_ANNUAL || ''; // $15/mo billed annually
+const STRIPE_PRICE_STARTER = process.env.STRIPE_PRICE_STARTER || '';       // $9/mo
 
 // ── Plan definitions ──
 export const PLANS = {
   trial: { name: 'Free', projects: 1, photos: 500, ai: false, price: 0 },
+  starter: { name: 'Starter', projects: 5, photos: 5000, ai: true, price: 9 },
   pro: { name: 'Pro', projects: Infinity, photos: Infinity, ai: true, price: 19 },
   pro_annual: { name: 'Pro Annual', projects: Infinity, photos: Infinity, ai: true, price: 15 },
 } as const;
@@ -37,7 +39,12 @@ router.post('/create-checkout', authenticate, async (req, res) => {
     return res.status(500).json({ error: 'Stripe 未配置' });
   }
 
-  const priceId = plan === 'pro_annual' ? STRIPE_PRICE_PRO_ANNUAL : STRIPE_PRICE_PRO;
+  const priceMap: Record<string, string> = {
+    starter: STRIPE_PRICE_STARTER,
+    pro: STRIPE_PRICE_PRO,
+    pro_annual: STRIPE_PRICE_PRO_ANNUAL,
+  };
+  const priceId = priceMap[plan] || STRIPE_PRICE_PRO;
   if (!priceId) return res.status(400).json({ error: '无效套餐' });
 
   const user = queryOne('SELECT email, stripe_customer_id FROM users WHERE id = ?', [userId]) as any;
