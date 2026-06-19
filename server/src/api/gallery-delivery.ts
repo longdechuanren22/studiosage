@@ -51,12 +51,40 @@ router.get('/:id/gallery', async (req, res) => {
     gallery = queryOne('SELECT * FROM project_galleries WHERE id = ?', [id]) as any;
   }
 
+  // ── 48h/24h reminder detection ──
+  const photos = JSON.parse(gallery.photos || '[]');
+  let reminder: string | null = null;
+  if (gallery.selection_status !== 'selection_done' && gallery.selection_deadline) {
+    const hoursLeft = Math.floor((new Date(gallery.selection_deadline).getTime() - Date.now()) / 3600000);
+    if (hoursLeft <= 24 && hoursLeft > 0) {
+      reminder = `⏰ 选片截止仅剩 ${hoursLeft} 小时，建议立即提醒客户`;
+    } else if (hoursLeft <= 48 && hoursLeft > 24) {
+      reminder = `📅 选片截止还有 ${Math.floor(hoursLeft/24)} 天，可以发送温和提醒`;
+    } else if (hoursLeft <= 0) {
+      reminder = `⚠️ 选片已逾期 ${Math.abs(Math.floor(hoursLeft/24))} 天`;
+    }
+  }
+
+  // ── AI duplicate/blurry flag based on filename analysis ──
+  const duplicateGroups: { base: string; count: number; ids: string[] }[] = [];
+  const filenameMap = new Map<string, string[]>();
+  for (const p of photos) {
+    const base = (p.originalName || p.filename || '').replace(/[_-]\d+\.(jpg|jpeg|png)/i, '').toLowerCase();
+    if (!filenameMap.has(base)) filenameMap.set(base, []);
+    filenameMap.get(base)!.push(p.id);
+  }
+  for (const [base, ids] of filenameMap) {
+    if (ids.length >= 3) duplicateGroups.push({ base, count: ids.length, ids });
+  }
+
   res.json({
     ...gallery,
-    photos: JSON.parse(gallery.photos || '[]'),
+    photos,
     selectedIds: JSON.parse(gallery.selected_ids || '[]'),
     rejectedIds: JSON.parse(gallery.rejected_ids || '[]'),
     favoriteIds: JSON.parse(gallery.favorite_ids || '[]'),
+    reminder,
+    duplicateGroups: duplicateGroups.length > 0 ? duplicateGroups : undefined,
   });
 });
 

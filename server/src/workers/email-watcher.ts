@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { fetchRecentMessages, type EmailConfig } from '../adapters/email.js';
 import { classifyMessage } from '../ai/engine.js';
 import { initDb } from '../db/schema.js';
-import { queryOne, run } from '../db/query.js';
+import { queryAll, queryOne, run } from '../db/query.js';
 import { notifyMessage, notifyClientUpdated } from '../utils/events.js';
 
 let interval: ReturnType<typeof setInterval> | null = null;
@@ -56,19 +56,84 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
             }
           }
 
-          // ── AI classification + draft reply ──
+          // ── AI 多轮对话记忆 —— 构建上下文 ──
+          let conversationMemory = undefined;
+          if (clientId) {
+            const history = queryAll(
+              `SELECT subject, body, category, created_at FROM messages
+               WHERE client_id = ? AND user_id = ? AND category != 'spam'
+               ORDER BY created_at DESC LIMIT 5`,
+              [clientId, uid]
+            ) as any[];
+            const recentSubjects = history.map((h: any) => h.subject).filter(Boolean);
+            const recentTopics = history.map((h: any) => {
+              const s = (h.subject + ' ' + (h.body || '').slice(0, 200)).toLowerCase();
+              const topics = [];
+              if (/wedding|婚礼/i.test(s)) topics.push('wedding');
+              if (/portrait|写真|人像/i.test(s)) topics.push('portrait');
+              if (/price|budget|价格|多少钱|报价/i.test(s)) topics.push('pricing');
+              if (/date|日期|when|schedule/i.test(s)) topics.push('scheduling');
+              if (/gallery|选片|photo|照片/i.test(s)) topics.push('photos');
+              return topics.length ? topics.join(',') : '';
+            }).filter(t => t !== '');
+
+            const lastPhotoReply = queryOne(
+              "SELECT created_at FROM messages WHERE client_id=? AND user_id=? AND channel='email' AND status='replied' ORDER BY created_at DESC LIMIT 1",
+              [clientId, uid]
+            ) as any;
+            const lastClientMsg = queryOne(
+              "SELECT created_at FROM messages WHERE client_id=? AND user_id=? AND channel='email' ORDER BY created_at DESC LIMIT 1",
+              [clientId, uid]
+            ) as any;
+            const pendingSince = (!lastPhotoReply || (lastClientMsg && lastClientMsg.created_at > lastPhotoReply.created_at))
+              ? lastClientMsg?.created_at : undefined;
+
+            conversationMemory = {
+              messageCount: history.length,
+              recentSubjects,
+              recentTopics,
+              lastReplyAt: lastPhotoReply?.created_at,
+              pendingSince,
+            };
+          }
+
+          // ── AI classification + sentiment + pricing intent ──
           let category = 'normal';
           let aiReply = '';
+          let sentiment = 'neutral' as string;
+          let pricingIntent = false;
+          let needsImmediateAttention = false;
           try {
             const result = await classifyMessage(
-              cleanBody.slice(0, 2000),
+              cleanBody.slice(0, 3000),
               msg.subject || '',
-              { name: extractName(msg.from || ''), stage: clientStage }
+              {
+                name: extractName(msg.from || ''),
+                stage: clientStage,
+                conversationMemory,
+              }
             );
             category = result.category;
             aiReply = result.suggestedReply || '';
+            sentiment = result.sentiment || 'neutral';
+            pricingIntent = result.pricingIntent || false;
+            needsImmediateAttention = result.needsImmediateAttention || false;
           } catch (err) {
             console.warn('[EmailWatcher] AI classification failed:', (err as Error).message);
+          }
+
+          // ── 更新客户对话记忆 ──
+          if (clientId) {
+            const now = new Date().toISOString();
+            const memory = {
+              lastInteractionAt: now,
+              messageCount: (conversationMemory?.messageCount || 0) + 1,
+              lastSubject: msg.subject || '',
+              lastSentiment: sentiment,
+              lastPricingIntent: pricingIntent,
+            };
+            run("UPDATE clients SET conversation_memory=?, updated_at=datetime('now') WHERE id=?",
+              [JSON.stringify(memory), clientId]);
           }
 
           // 🔒 Skip spam
@@ -121,20 +186,36 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
             }
           } catch {}
 
+          // Build subject with AI tags
+          let taggedSubject = msg.subject || '';
+          const tags: string[] = [];
+          if (pricingIntent) tags.push('💰询价');
+          if (needsImmediateAttention || sentiment === 'urgent' || sentiment === 'frustrated') tags.push('🔴');
+          if (sentiment === 'anxious') tags.push('🟡');
+          if (tags.length) taggedSubject = tags.join('') + ' ' + taggedSubject;
+
           // Store message
           const msgId = randomUUID();
           run(
             `INSERT INTO messages (id, user_id, client_id, from_address, subject, body, category, ai_reply, status, channel, stage_at_time, imap_uid, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'email', ?, ?, datetime('now'))`,
-            [msgId, uid, clientId, msg.from || '', msg.subject || '', cleanBody.slice(0, 5000),
+            [msgId, uid, clientId, msg.from || '', taggedSubject, cleanBody.slice(0, 5000),
              category, aiReply.slice(0, 2000), 'pending', clientStage, msg.id]
           );
 
-          // SSE real-time push
+          // SSE real-time push with sentiment data
           try {
-            notifyMessage(uid, { id: msgId, from_address: msg.from, subject: msg.subject, client_id: clientId, category, status: 'pending' });
+            notifyMessage(uid, {
+              id: msgId, from_address: msg.from, subject: taggedSubject,
+              client_id: clientId, category, status: 'pending',
+              sentiment, pricingIntent, needsImmediateAttention,
+            });
             notifyClientUpdated(uid, clientId!, 'engaged');
           } catch {}
+
+          if (needsImmediateAttention) {
+            console.log(`[EmailWatcher] ⚠️ IMMEDIATE: ${fromEmail} — sentiment=${sentiment} pricing=${pricingIntent}`);
+          }
 
           console.log(`[EmailWatcher] ⚡ ${fromEmail} → ${category} → Dashboard`);
         } catch (err) {

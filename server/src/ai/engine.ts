@@ -23,9 +23,30 @@ export function getAIStatus() {
   };
 }
 
-interface ClientContext { name?: string; stage?: string; shootDate?: string; packageType?: string; galleryUploaded?: number; galleryTotal?: number; pendingInvoices?: number; }
+interface ClientContext {
+  name?: string; stage?: string; shootDate?: string; packageType?: string;
+  galleryUploaded?: number; galleryTotal?: number; pendingInvoices?: number;
+  conversationMemory?: {
+    messageCount: number;
+    lastInteractionAt?: string;
+    recentSubjects: string[];
+    recentTopics: string[];
+    lastReplyAt?: string;           // when photographer last replied
+    pendingSince?: string;          // if client is waiting for reply
+  };
+}
 
-interface ClassifyResult { category: 'urgent' | 'normal' | 'spam'; summary: string; suggestedReply: string; confidence: number; stage?: string; }
+interface ClassifyResult {
+  category: 'urgent' | 'normal' | 'spam';
+  summary: string;
+  suggestedReply: string;
+  confidence: number;
+  stage?: string;
+  // ── 新增 ──
+  sentiment?: 'positive' | 'neutral' | 'anxious' | 'frustrated' | 'urgent';
+  pricingIntent?: boolean;         // 客户是否在询价
+  needsImmediateAttention?: boolean; // 是否需要摄影师立刻处理
+}
 
 // Multi-model callAI: tries Claude then DeepSeek
 export async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promise<string> {
@@ -76,10 +97,52 @@ export async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promi
 
 export async function classifyMessage(body: string, subject: string, ctx?: ClientContext): Promise<ClassifyResult> {
   if (!USE_AI) return classifyOffline(body, subject, ctx);
+
+  // Build multi-turn conversation memory for context-aware replies
+  let memoryBlock = '';
+  if (ctx?.conversationMemory) {
+    const m = ctx.conversationMemory;
+    memoryBlock = [
+      `Conversation history: ${m.messageCount} messages total.`,
+      m.recentSubjects.length ? `Recent topics: ${m.recentSubjects.join(' | ')}` : '',
+      m.lastReplyAt ? `Photographer last replied: ${m.lastReplyAt}` : 'No reply sent yet.',
+      m.pendingSince ? `⛔ Client has been waiting since ${m.pendingSince} — needs reply.` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  const stageInfo = ctx
+    ? `Client: ${ctx.name || 'Unknown'}, Stage: ${ctx.stage || '?'}, Gallery: ${ctx.galleryUploaded || 0}/${ctx.galleryTotal || 0}`
+    : 'No context';
+
+  const prompt = `You are an AI assistant for a professional photographer. Analyze this client message:
+
+${memoryBlock}
+
+Client context: ${stageInfo}
+Subject: "${subject}"
+Message: "${body.slice(0, 3000)}"
+
+Return a JSON object:
+{
+  "category": "urgent" | "normal" | "spam",
+  "summary": "1-line summary in English",
+  "suggestedReply": "Professional, warm reply as if from the photographer. Keep under 150 chars.",
+  "confidence": 0.0-1.0,
+  "stage": "inquiry|engaged|booked|shooting|production|delivery|post_delivery",
+  "sentiment": "positive" | "neutral" | "anxious" | "frustrated" | "urgent",
+  "pricingIntent": true|false,
+  "needsImmediateAttention": true|false
+}
+
+Guidelines:
+- sentiment: "frustrated" if client seems upset/angry. "anxious" if worried about deadlines. "urgent" if time-critical.
+- pricingIntent: true if client is asking about prices, packages, or "how much"
+- needsImmediateAttention: true if sentiment is frustrated/urgent OR client has been waiting >48h
+- suggestedReply: if pricingIntent is true, don't quote prices. Instead offer to prepare a custom proposal.
+- Use conversation history to avoid repeating information the client already knows.`;
+
   try {
-    const stageInfo = ctx ? `Client: ${ctx.name || 'Unknown'}, Stage: ${ctx.stage || '?'}, Gallery: ${ctx.galleryUploaded || 0}/${ctx.galleryTotal || 0}` : 'No context';
-    const prompt = `Classify this photography client message. Context: ${stageInfo}\nSubject: "${subject}"\nMessage: "${body}"\nOutput JSON: {"category":"urgent|normal|spam","summary":"...","suggestedReply":"...","confidence":0.X,"stage":"inquiry|...|post_delivery"}`;
-    const text = await callAI(prompt, 600, 0.3);
+    const text = await callAI(prompt, 800, 0.3);
     return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
   } catch (err) {
     console.error('[AI] classifyMessage failed, using offline:', (err as Error).message);

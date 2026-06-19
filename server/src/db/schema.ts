@@ -92,7 +92,8 @@ function runMigrations(db: Database.Database) {
       phone TEXT DEFAULT '', wechat_id TEXT DEFAULT '', stage TEXT NOT NULL DEFAULT 'inquiry',
       type TEXT DEFAULT '', shoot_date TEXT, package_type TEXT, source TEXT DEFAULT 'manual',
       notes TEXT DEFAULT '', stripe_customer_id TEXT,
-      metadata TEXT DEFAULT '{}', status TEXT DEFAULT 'active', updated_at TEXT DEFAULT (datetime('now'))
+      metadata TEXT DEFAULT '{}', conversation_memory TEXT DEFAULT '{}',
+      status TEXT DEFAULT 'active', updated_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -174,6 +175,7 @@ function runMigrations(db: Database.Database) {
   addCol('users', 'stripe_customer_id', 'TEXT');
   addCol('users', 'stripe_subscription_id', 'TEXT');
   addCol('delivery_rounds', 'share_token', 'TEXT');
+  addCol('clients', 'conversation_memory', "TEXT DEFAULT '{}'");
 
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_messages_imap_uid ON messages(user_id, imap_uid)'); } catch {}

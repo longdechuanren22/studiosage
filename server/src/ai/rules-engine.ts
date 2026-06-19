@@ -203,6 +203,9 @@ export interface ClassifyResult {
   suggestedReply: string;
   confidence: number;
   stage: string;
+  sentiment?: 'positive' | 'neutral' | 'anxious' | 'frustrated' | 'urgent';
+  pricingIntent?: boolean;
+  needsImmediateAttention?: boolean;
 }
 
 export interface InvoiceItem { description: string; quantity: number; unitPrice: number; }
@@ -244,12 +247,25 @@ export function classifyOffline(body: string, subject: string, clientContext?: {
   const category = detectCategory(body, subject);
   const reply = generateSmartReply(body, subject, stage, clientContext);
 
+  // Offline sentiment + pricing intent detection
+  const pricingKeywords = /how much|price|pricing|cost|rate|fee|discount|package price|多少钱|价格|费用|报价|收费/i;
+  const text = (subject + ' ' + body).toLowerCase();
+  const sentiment = /urgent|asap|emergency|immediately|right now|紧急|马上|立刻/i.test(text) ? 'urgent'
+    : /angry|frustrated|complaint|refund|cancel|生气|退款|取消|投诉/i.test(text) ? 'frustrated'
+    : /worried|nervous|concerned|scared|担心|紧张/i.test(text) ? 'anxious'
+    : 'neutral';
+  const pricingIntent = pricingKeywords.test(text);
+  const needsImmediateAttention = category === 'urgent' || sentiment === 'urgent' || sentiment === 'frustrated';
+
   return {
     category,
     summary: `${category} message about ${stage.replace('_', ' ')}`,
     suggestedReply: reply,
     confidence: 0.75,
     stage,
+    sentiment: sentiment as any,
+    pricingIntent,
+    needsImmediateAttention,
   };
 }
 

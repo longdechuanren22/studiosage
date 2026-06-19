@@ -4,7 +4,7 @@
 
 ## 🔴 P0 — Production Issues
 
-- [ ] **Deploy `trust proxy` fix** — `app.set('trust proxy', 1)` added to `server/src/index.ts` (fixes rate limiting behind reverse proxy). Must rebuild Docker image and push to server.
+- [x] **Deploy `trust proxy` fix** — `app.set('trust proxy', 1)` added to `server/src/index.ts` (fixes rate limiting behind reverse proxy). Deployed 2026-06-19 ~19:47 (container rebuild).
 
 ## 🟡 P1 — Soon
 

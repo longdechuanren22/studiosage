@@ -19,6 +19,8 @@ interface Gallery {
   id: string; project_id: string; total_count: number; photos: GalleryPhoto[];
   selection_deadline: string; selection_status: string; share_token: string;
   selectedIds: string[]; rejectedIds: string[]; favoriteIds: string[];
+  reminder?: string;
+  duplicateGroups?: { base: string; count: number; ids: string[] }[];
 }
 interface DeliveryRound {
   id: string; round_number: number; deliveredPhotos: { id: string; filename: string; url: string; order: number }[];
@@ -303,6 +305,12 @@ export default function Projects() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <div style={{ fontSize: 14, color: '#86868B' }}>
                     共 {gallery.photos.length} 张样片 | 已选 {gallery.selectedIds.length} 张 | 状态: {gallery.selection_status}
+                    {gallery.reminder && <span style={{ marginLeft: 12, fontSize: 13, fontWeight: 600, color: gallery.reminder.startsWith('⚠️') ? '#FF3B30' : '#FF9500' }}>{gallery.reminder}</span>}
+                    {gallery.duplicateGroups && gallery.duplicateGroups.length > 0 && (
+                      <span style={{ marginLeft: 12, fontSize: 12, color: '#FF9500', background: '#FFF3E0', padding: '2px 8px', borderRadius: 6 }}>
+                        ⚠️ {gallery.duplicateGroups.length} 组疑似连拍 (共{gallery.duplicateGroups.reduce((s,g) => s + g.count, 0)}张)
+                      </span>
+                    )}
                     {gallery.share_token && <span style={{ marginLeft: 12, color: '#007AFF', cursor: 'pointer' }}
                       onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/sage/portal/selection/${gallery.share_token}`).then(() => toast('链接已复制', 'info')); }}>
                       📋 复制选片链接</span>}
