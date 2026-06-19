@@ -5,6 +5,13 @@ import { authenticateClient } from '../middleware/clientAuth.js';
 
 const router: RouterType = Router();
 
+async function emitProjectUpdate(userId: string, projectId: string, status: string) {
+  try {
+    const { notifyProjectUpdated } = await import('../utils/events.js');
+    notifyProjectUpdated(userId, projectId, status);
+  } catch {}
+}
+
 // ── Authenticated client routes (via client token) ──
 
 // Get client's own messages
@@ -135,6 +142,7 @@ router.post('/selection/:shareToken', async (req, res) => {
 
   // Update project status to editing (only if in selection/draft — don't override later states)
   run("UPDATE projects SET status='editing', updated_at=datetime('now') WHERE id=? AND status IN ('selection','draft')", [gallery.project_id]);
+  emitProjectUpdate(gallery.user_id, gallery.project_id, 'editing');
 
   res.json({ ok: true, selectedCount: selectedIds.length, message: '选片提交成功！摄影师将开始精修。' });
 });
@@ -168,8 +176,10 @@ router.get('/review/:shareToken', async (req, res) => {
     // Complete project if last round
     if (round.round_number >= round.max_revision_rounds) {
       run("UPDATE projects SET status='completed', updated_at=datetime('now') WHERE id=?", [round.project_id]);
+      emitProjectUpdate(round.user_id, round.project_id, 'completed');
     } else {
       run("UPDATE projects SET status='editing', updated_at=datetime('now') WHERE id=?", [round.project_id]);
+      emitProjectUpdate(round.user_id, round.project_id, 'editing');
     }
     round.status = 'accepted'; // Update in-memory for response
   }
@@ -217,6 +227,7 @@ router.post('/review/:shareToken/feedback', async (req, res) => {
     let paymentReminder: string | null = null;
     if (round.round_number >= round.max_revision_rounds) {
       run("UPDATE projects SET status='completed', updated_at=datetime('now') WHERE id=?", [round.project_id]);
+      emitProjectUpdate(round.user_id, round.project_id, 'completed');
 
       // 💰 催款闭环：项目完成 → 检测未付尾款 → 自动标记逾期 → 生成催款话术
       const unpaidInvoices = queryAll(
@@ -258,6 +269,7 @@ router.post('/review/:shareToken/feedback', async (req, res) => {
     } else {
       // More rounds remaining → move project back to editing for photographer to start next round
       run("UPDATE projects SET status='editing', updated_at=datetime('now') WHERE id=?", [round.project_id]);
+      emitProjectUpdate(round.user_id, round.project_id, 'editing');
     }
 
     return res.json({
@@ -286,10 +298,13 @@ router.post('/review/:shareToken/feedback', async (req, res) => {
       ) as any[];
     }
 
-    // Save revision requests with AI clarity validation + auto-classification
+    // Two-pass revision handling: validate all first, then insert all (Bug 11)
+    // Prevents partial inserts when later revisions fail AI validation
+    const validatedRevisions: Array<{id: string; photoId: string; revisionType: string; description: string; annotation: string | null}> = [];
     if (Array.isArray(revisionRequests)) {
       const { randomUUID } = await import('node:crypto');
 
+      // ── Pass 1: validate all revision requests ──
       for (const rr of revisionRequests) {
         if (!rr.photoId) continue;
         if (!rr.description || rr.description.trim() === '') {
@@ -315,11 +330,22 @@ router.post('/review/:shareToken/feedback', async (req, res) => {
           // AI unavailable → let it through with basic check
         }
 
+        validatedRevisions.push({
+          id: randomUUID(),
+          photoId: rr.photoId,
+          revisionType,
+          description: rr.description,
+          annotation: rr.annotation || null,
+        });
+      }
+
+      // ── Pass 2: insert all validated revisions (all-or-nothing) ──
+      for (const rev of validatedRevisions) {
         run(
           `INSERT INTO revision_requests (id, round_id, user_id, photo_id, revision_type, description, annotation)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [randomUUID(), round.id, round.user_id, rr.photoId,
-           revisionType, rr.description, rr.annotation || null]
+          [rev.id, round.id, round.user_id, rev.photoId,
+           rev.revisionType, rev.description, rev.annotation]
         );
       }
     }
@@ -331,6 +357,7 @@ router.post('/review/:shareToken/feedback', async (req, res) => {
 
     // Set project back to editing
     run("UPDATE projects SET status='editing', updated_at=datetime('now') WHERE id=?", [round.project_id]);
+    emitProjectUpdate(round.user_id, round.project_id, 'editing');
 
     // AI conflict detection — check new revisions against previous rounds
     let conflictWarning = null;

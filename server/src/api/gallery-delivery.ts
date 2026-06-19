@@ -10,6 +10,9 @@ import { uploadToR2, deleteFromR2, getPublicUrl, isR2Enabled } from '../utils/st
 
 const router: RouterType = Router();
 
+// Per-project upload lock to prevent concurrent uploads (Bug 6, Bug 7)
+const uploadLocks = new Map<string, boolean>();
+
 // ── Multer setup ──
 const UPLOADS_ROOT = path.join(process.cwd(), 'data', 'uploads');
 
@@ -64,6 +67,12 @@ router.post('/:id/gallery/photos', async (req, res) => {
   const project = queryOne('SELECT id FROM projects WHERE id = ? AND user_id = ?', [req.params.id, userId]);
   if (!project) return res.status(404).json({ error: '项目不存在' });
 
+  // 🔒 Prevent concurrent uploads (Bug 6, Bug 7)
+  if (uploadLocks.get(req.params.id)) {
+    return res.status(409).json({ error: '上传正在进行中，请稍后再试' });
+  }
+  uploadLocks.set(req.params.id, true);
+
   // Ensure gallery exists
   let gallery = queryOne('SELECT * FROM project_galleries WHERE project_id = ?', [req.params.id]) as any;
   if (!gallery) {
@@ -98,62 +107,66 @@ router.post('/:id/gallery/photos', async (req, res) => {
   }).array('photos', 100); // max 100 per batch
 
   upload(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    try {
+      if (err) return res.status(400).json({ error: err.message });
 
-    const files = req.files as Express.Multer.File[];
-    if (!files || files.length === 0) return res.status(400).json({ error: '未选择文件' });
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) return res.status(400).json({ error: '未选择文件' });
 
-    const existingPhotos: any[] = JSON.parse(gallery.photos || '[]');
-    const startOrder = existingPhotos.length;
+      const existingPhotos: any[] = JSON.parse(gallery.photos || '[]');
+      const startOrder = existingPhotos.length;
 
-    // Generate thumbnails
-    const newPhotos: any[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const thumbFilename = `thumb_${file.filename}`;
-      const thumbPath = path.join(uploadDir, 'thumbnails', thumbFilename);
+      // Generate thumbnails
+      const newPhotos: any[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const thumbFilename = `thumb_${file.filename}`;
+        const thumbPath = path.join(uploadDir, 'thumbnails', thumbFilename);
 
-      // Generate thumbnail
-      let thumbBuffer: Buffer;
-      try {
-        thumbBuffer = await sharp(file.path)
-          .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 80 })
-          .toBuffer();
-      } catch (e) {
-        thumbBuffer = fs.readFileSync(file.path);
+        // Generate thumbnail
+        let thumbBuffer: Buffer;
+        try {
+          thumbBuffer = await sharp(file.path)
+            .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+        } catch (e) {
+          thumbBuffer = fs.readFileSync(file.path);
+        }
+
+        // Upload original to R2 (or local fallback)
+        const originKey = `${userId}/${req.params.id}/originals/${file.filename}`;
+        const thumbKey = `${userId}/${req.params.id}/thumbnails/${thumbFilename}`;
+        const originUrl = await uploadToR2(originKey, fs.readFileSync(file.path), `image/${path.extname(file.filename).replace('.', '')}`);
+        const thumbUrl = await uploadToR2(thumbKey, thumbBuffer, 'image/jpeg');
+
+        // Clean up local temp if R2 is enabled
+        if (isR2Enabled()) {
+          try { fs.unlinkSync(file.path); } catch {}
+        }
+
+        newPhotos.push({
+          id: randomUUID(),
+          filename: file.originalname,
+          originalName: file.originalname,
+          url: originUrl,
+          thumbnailUrl: thumbUrl,
+          order: startOrder + i + 1,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        });
       }
 
-      // Upload original to R2 (or local fallback)
-      const originKey = `${userId}/${req.params.id}/originals/${file.filename}`;
-      const thumbKey = `${userId}/${req.params.id}/thumbnails/${thumbFilename}`;
-      const originUrl = await uploadToR2(originKey, fs.readFileSync(file.path), `image/${path.extname(file.filename).replace('.', '')}`);
-      const thumbUrl = await uploadToR2(thumbKey, thumbBuffer, 'image/jpeg');
+      const allPhotos = [...existingPhotos, ...newPhotos];
+      run(
+        `UPDATE project_galleries SET photos=?, total_count=?, selection_status='uploading', updated_at=datetime('now') WHERE id=?`,
+        [JSON.stringify(allPhotos), allPhotos.length, gallery.id]
+      );
 
-      // Clean up local temp if R2 is enabled
-      if (isR2Enabled()) {
-        try { fs.unlinkSync(file.path); } catch {}
-      }
-
-      newPhotos.push({
-        id: randomUUID(),
-        filename: file.originalname,
-        originalName: file.originalname,
-        url: originUrl,
-        thumbnailUrl: thumbUrl,
-        order: startOrder + i + 1,
-        size: file.size,
-        uploadedAt: new Date().toISOString(),
-      });
+      res.status(201).json({ added: newPhotos.length, total: allPhotos.length, photos: newPhotos });
+    } finally {
+      uploadLocks.delete(req.params.id);
     }
-
-    const allPhotos = [...existingPhotos, ...newPhotos];
-    run(
-      `UPDATE project_galleries SET photos=?, total_count=?, selection_status='uploading', updated_at=datetime('now') WHERE id=?`,
-      [JSON.stringify(allPhotos), allPhotos.length, gallery.id]
-    );
-
-    res.status(201).json({ added: newPhotos.length, total: allPhotos.length, photos: newPhotos });
   });
 });
 
@@ -266,6 +279,12 @@ router.post('/:id/deliveries', async (req, res) => {
     return res.status(400).json({ error: '项目已完成或已取消，无法上传' });
   }
 
+  // 🔒 Prevent concurrent uploads (Bug 6, Bug 7)
+  if (uploadLocks.get(req.params.id)) {
+    return res.status(409).json({ error: '上传正在进行中，请稍后再试' });
+  }
+  uploadLocks.set(req.params.id, true);
+
   // Check if we're revising an existing round (review → editing) or creating a new round
   const existingPending = queryOne(
     "SELECT * FROM delivery_rounds WHERE project_id = ? AND status = 'revision_requested' ORDER BY round_number DESC LIMIT 1",
@@ -327,47 +346,51 @@ router.post('/:id/deliveries', async (req, res) => {
   }).array('photos', 200);
 
   upload(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    try {
+      if (err) return res.status(400).json({ error: err.message });
 
-    const files = req.files as Express.Multer.File[];
-    if (!files || files.length === 0) return res.status(400).json({ error: '未选择文件' });
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) return res.status(400).json({ error: '未选择文件' });
 
-    const round = queryOne('SELECT * FROM delivery_rounds WHERE id = ?', [roundId]) as any;
-    const existingPhotos = JSON.parse(round.delivered_photos || '[]');
+      const round = queryOne('SELECT * FROM delivery_rounds WHERE id = ?', [roundId]) as any;
+      const existingPhotos = JSON.parse(round.delivered_photos || '[]');
 
-    const newPhotos = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const editKey = `${userId}/${req.params.id}/edited/round_${roundNumber}/${file.filename}`;
-      const editUrl = await uploadToR2(editKey, fs.readFileSync(file.path), 'image/jpeg');
-      if (isR2Enabled()) { try { fs.unlinkSync(file.path); } catch {} }
-      newPhotos.push({
-        id: randomUUID(),
-        filename: file.originalname,
-        url: editUrl,
-        order: existingPhotos.length + i + 1,
-        size: file.size,
+      const newPhotos = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const editKey = `${userId}/${req.params.id}/edited/round_${roundNumber}/${file.filename}`;
+        const editUrl = await uploadToR2(editKey, fs.readFileSync(file.path), 'image/jpeg');
+        if (isR2Enabled()) { try { fs.unlinkSync(file.path); } catch {} }
+        newPhotos.push({
+          id: randomUUID(),
+          filename: file.originalname,
+          url: editUrl,
+          order: existingPhotos.length + i + 1,
+          size: file.size,
+        });
+      }
+
+      const allPhotos = [...existingPhotos, ...newPhotos];
+      const reviewDeadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+      run(
+        `UPDATE delivery_rounds SET delivered_photos=?, status='pending_review', review_deadline=?, updated_at=datetime('now') WHERE id=?`,
+        [JSON.stringify(allPhotos), reviewDeadline, roundId]
+      );
+
+      // Update project status to review
+      run("UPDATE projects SET status='review', updated_at=datetime('now') WHERE id=?", [project.id]);
+
+      res.status(201).json({
+        roundId,
+        roundNumber,
+        added: newPhotos.length,
+        total: allPhotos.length,
+        reviewDeadline,
       });
+    } finally {
+      uploadLocks.delete(req.params.id);
     }
-
-    const allPhotos = [...existingPhotos, ...newPhotos];
-    const reviewDeadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
-
-    run(
-      `UPDATE delivery_rounds SET delivered_photos=?, status='pending_review', review_deadline=?, updated_at=datetime('now') WHERE id=?`,
-      [JSON.stringify(allPhotos), reviewDeadline, roundId]
-    );
-
-    // Update project status to review
-    run("UPDATE projects SET status='review', updated_at=datetime('now') WHERE id=?", [project.id]);
-
-    res.status(201).json({
-      roundId,
-      roundNumber,
-      added: newPhotos.length,
-      total: allPhotos.length,
-      reviewDeadline,
-    });
   });
 });
 

@@ -226,6 +226,15 @@ router.post('/:id/advance', async (req, res) => {
   }
 
   if (targetStatus === 'completed') {
+    // Prevent completion without at least one delivery round (Bug 5)
+    const roundCount = queryOne(
+      "SELECT COUNT(*) as count FROM delivery_rounds WHERE project_id = ?",
+      [project.id]
+    ) as any;
+    if (!roundCount || roundCount.count === 0) {
+      return res.status(400).json({ error: '请先上传至少一轮精修照片' });
+    }
+
     if (project.status === 'editing') {
       run(`UPDATE projects SET status=?, updated_at=datetime('now') WHERE id=?`, [targetStatus, project.id]);
       emitProjectUpdate(userId, project.id, targetStatus);
@@ -257,6 +266,15 @@ router.post('/:id/cancel', async (req, res) => {
   const userId = req.userId!;
   const existing = queryOne('SELECT * FROM projects WHERE id = ? AND user_id = ?', [req.params.id, userId]);
   if (!existing) return res.status(404).json({ error: '项目不存在' });
+
+  // Prevent overwriting terminal status (Bug 4)
+  const e = existing as any;
+  if (e.status === 'completed') {
+    return res.status(400).json({ error: '已完成的项目无法取消' });
+  }
+  if (e.status === 'cancelled') {
+    return res.status(400).json({ error: '项目已被取消' });
+  }
 
   run("UPDATE projects SET status='cancelled', updated_at=datetime('now') WHERE id=?", [req.params.id]);
   emitProjectUpdate(userId, req.params.id, 'cancelled');

@@ -55,7 +55,7 @@ router.post('/create-checkout', authenticate, async (req, res) => {
           'Authorization': `Bearer ${STRIPE_SECRET}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({ email: user.email, metadata: JSON.stringify({ userId }) }),
+        body: new URLSearchParams({ email: user.email, 'metadata[userId]': userId }),
       });
       const cust = await custResp.json() as any;
       if (!custResp.ok) throw new Error(cust.error?.message || '创建客户失败');

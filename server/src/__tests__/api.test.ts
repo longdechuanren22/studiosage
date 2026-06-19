@@ -16,7 +16,7 @@ describe('API Routes', () => {
     const res = await fetch(`${BASE}/api/health`);
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.status).toBe('ok');
+    expect(json.status).toBe('healthy');
   });
 
   it('GET /api/settings returns config status', async () => {

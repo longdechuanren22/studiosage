@@ -58,6 +58,6 @@ describe('API Routes', () => {
     const res = await fetch('http://localhost:3001/api/health');
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.status).toBe('ok');
+    expect(json.status).toBe('healthy');
   });
 });
