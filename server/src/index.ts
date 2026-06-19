@@ -31,6 +31,9 @@ const PORT = process.env.PORT || 3001;
 
 initDb().catch(err => { logger.error('DB init failed:', err); process.exit(1); });
 
+// Trust reverse proxy for accurate client IPs (rate limiting, logging)
+app.set('trust proxy', 1);
+
 // Auto-start email watcher if config exists in DB
 async function tryStartEmailWatcher() {
   try {
@@ -44,8 +47,8 @@ async function tryStartEmailWatcher() {
       const password = conn.refresh_token_encrypted ? decrypt(conn.refresh_token_encrypted) : '';
       if (cfg.email) {
         const { startEmailWatcher } = await import('./workers/email-watcher.js');
-        startEmailWatcher({ ...cfg, password }, 15000, conn.user_id);
-        logger.info(`Auto-started email watcher for ${cfg.email}`);
+        startEmailWatcher({ ...cfg, password }, 0, conn.user_id); // 0=IDLE mode (real-time, no polling)
+        logger.info(`Auto-started real-time email watcher (IMAP IDLE) for ${cfg.email}`);
       }
     }
   } catch (err) {
@@ -109,4 +112,22 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   logger.info(`StudioSage API running on http://localhost:${PORT}`);
+});
+
+// Graceful shutdown — close IMAP IDLE connections
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received — shutting down email watchers');
+  try {
+    const { stopEmailWatcher } = await import('./workers/email-watcher.js');
+    stopEmailWatcher();
+  } catch {}
+  process.exit(0);
+});
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received — shutting down email watchers');
+  try {
+    const { stopEmailWatcher } = await import('./workers/email-watcher.js');
+    stopEmailWatcher();
+  } catch {}
+  process.exit(0);
 });

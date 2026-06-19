@@ -181,6 +181,137 @@ export async function fetchRecentMessages(cfg: EmailConfig, limit = 10): Promise
   });
 }
 
+// ── IMAP IDLE Real-time Watcher ──
+// Keeps a persistent IMAP connection in IDLE mode.
+// New mail triggers callback instantly — no polling delay.
+
+export type OnNewMessage = (msg: EmailMessage) => void | Promise<void>;
+
+let idleConnection: Imap | null = null;
+let idleStopRequested = false;
+
+export function stopIdleWatcher(): void {
+  idleStopRequested = true;
+  if (idleConnection) {
+    try { idleConnection.destroy(); } catch {}
+    idleConnection = null;
+  }
+}
+
+export function startIdleWatcher(cfg: EmailConfig, onMessage: OnNewMessage): void {
+  idleStopRequested = false;
+  let reconnectDelay = 2000;
+  const maxReconnectDelay = 60000;
+
+  const connect = () => {
+    if (idleStopRequested) return;
+    const imap = new Imap({
+      user: cfg.email, password: cfg.password,
+      host: cfg.imapHost, port: cfg.imapPort, tls: cfg.imapTls,
+      tlsOptions: { rejectUnauthorized: false },
+      connTimeout: 30000, authTimeout: 30000,
+      keepalive: { interval: 10000, idleInterval: 300000, forceNoop: true },
+    });
+
+    idleConnection = imap;
+
+    let lastSeenUid = 0;
+    let firstOpen = true;
+
+    imap.once('ready', () => {
+      console.log('[EmailIdle] Connected — IDLE mode active for', cfg.email);
+      reconnectDelay = 2000; // reset backoff on success
+      openInbox();
+    });
+
+    function openInbox() {
+      imap.openBox('INBOX', false, (err: Error | null) => {
+        if (err) {
+          console.error('[EmailIdle] openBox failed:', err.message);
+          imap.end();
+          return;
+        }
+        firstOpen = false;
+        // Start IDLE
+        enterIdle();
+      });
+    }
+
+    function enterIdle() {
+      imap.on('mail', (numNew: number) => {
+        console.log(`[EmailIdle] 📬 ${numNew} new message(s)`);
+        fetchLatest();
+      });
+      imap.on('update', () => {
+        fetchLatest();
+      });
+      (imap as any).idle();
+    }
+
+    function fetchLatest() {
+      try { (imap as any)._idle = false; } catch {}
+      imap.search(['ALL'], (err: Error | null, results: number[]) => {
+        if (err || !results?.length) {
+          enterIdle();
+          return;
+        }
+        // Only fetch the newest message (last UID)
+        const latestUids = results.slice(-3);
+        const newUids = latestUids.filter(uid => uid > lastSeenUid);
+        if (!newUids.length) { enterIdle(); return; }
+        lastSeenUid = Math.max(...latestUids);
+
+        let remaining = newUids.length;
+        const fetch = imap.fetch(newUids, { bodies: '', struct: true });
+        fetch.on('message', (msg: Imap.ImapMessage) => {
+          let body = '';
+          let uid = '';
+          msg.on('body', (stream: NodeJS.ReadableStream) => { stream.on('data', (chunk: Buffer) => body += chunk.toString('utf8')); });
+          msg.on('attributes', (attrs: Record<string, unknown>) => {
+            uid = attrs.uid?.toString() || '';
+          });
+          msg.once('end', async () => {
+            try {
+              const parsed = await simpleParser(body);
+              const emailMsg: EmailMessage = {
+                id: uid,
+                from: parsed.from?.text || '',
+                subject: parsed.subject || '',
+                body: parsed.text || parsed.html || '',
+                snippet: parsed.text?.slice(0, 200) || '',
+                date: parsed.date || new Date(),
+              };
+              await onMessage(emailMsg);
+            } catch { /* skip parse errors */ }
+            remaining--;
+            if (remaining === 0) enterIdle();
+          });
+        });
+        fetch.once('error', () => { remaining = 0; enterIdle(); });
+        // If fetch produces no messages
+        if (remaining === 0) enterIdle();
+      });
+    }
+
+    imap.on('error', (err: Error) => {
+      console.error('[EmailIdle] Error:', err.message);
+    });
+
+    imap.on('end', () => {
+      console.log('[EmailIdle] Disconnected, reconnecting in', reconnectDelay / 1000, 's');
+      idleConnection = null;
+      if (!idleStopRequested) {
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 1.5, maxReconnectDelay);
+      }
+    });
+
+    imap.connect();
+  };
+
+  connect();
+}
+
 /** Send a reply */
 export async function sendReply(cfg: EmailConfig, to: string, subject: string, body: string, inReplyTo?: string): Promise<void> {
   const transporter = nodemailer.createTransport({

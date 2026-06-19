@@ -34,7 +34,7 @@ const en = {
   app: { name: 'StudioSage', demo: 'Demo Mode' },
 
   // Nav
-  nav: { dashboard: 'Dashboard', clients: 'Clients', invoices: 'Invoices', projects: 'Projects', settings: 'Settings' },
+  nav: { dashboard: 'Dashboard', clients: 'Clients', invoices: 'Invoices', projects: 'Projects', connect: 'Connect', settings: 'Settings' },
 
   // Auth
   auth: {
@@ -296,7 +296,7 @@ const en = {
 
 const zh: typeof en = {
   app: { name: 'StudioSage', demo: '演示模式' },
-  nav: { dashboard: '面板', clients: '客户管理', invoices: '发票', projects: '项目', settings: '设置' },
+  nav: { dashboard: '面板', clients: '客户管理', invoices: '发票', projects: '项目', connect: '邮箱连接', settings: '设置' },
   auth: {
     loginTitle: '登录你的工作室',
     loginSubtitle: '欢迎回来',

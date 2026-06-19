@@ -13,7 +13,7 @@ const navItems: NavItem[] = [
   { to: '/clients', icon: '👥', labelKey: 'nav.clients' },
   { to: '/invoices', icon: '📄', labelKey: 'nav.invoices' },
   { to: '/projects', icon: '🎬', labelKey: 'nav.projects' },
-  { to: '/invoices', icon: '📄', labelKey: 'nav.invoices' },
+  { to: '/connect', icon: '📬', labelKey: 'nav.connect' },
   { to: '/settings', icon: '⚙', labelKey: 'nav.settings' },
 ];
 
