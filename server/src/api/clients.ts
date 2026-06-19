@@ -57,7 +57,16 @@ router.get('/:id', async (req, res) => {
     [req.params.id]
   );
 
-  res.json({ ...(client as any), messages, invoices });
+  // Parse AI-extracted insights from metadata
+  const c = client as any;
+  let insights: any[] = [];
+  try {
+    const meta = JSON.parse(c.metadata || '{}');
+    insights = meta.insights || [];
+    c.metadata_parsed = { ...meta, insights: undefined }; // return cleaned metadata without raw insights array
+  } catch { c.metadata_parsed = {}; }
+
+  res.json({ ...c, messages, invoices, insights });
 });
 
 // Create client manually

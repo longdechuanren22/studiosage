@@ -417,3 +417,192 @@ function validateClarityOffline(description: string): ClarityResult {
   // Looks specific enough — classify
   return { isSpecific: true, suggestedType: classifyRevisionOffline(d).revisionType };
 }
+
+// ── 非业务邮件识别 — 不属于摄影业务的邮件直接过滤 ──
+
+const NON_BUSINESS_PATTERNS: RegExp[] = [
+  // 社交媒体通知
+  /facebook.*(notif|mention|follow|like|comment|friend|request)/i,
+  /instagram.*(notif|mention|follow|like|comment|story)/i,
+  /linkedin.*(invitation|connect|request|notif|viewed|appeared)/i,
+  /twitter.*(notif|mention|follow|retweet)/i,
+  /tiktok.*(notif|message|follow)/i,
+  /pinterest.*(notif|pin|board)/i,
+  /snapchat/i,
+  // 银行/金融
+  /bank.*statement|transaction.*alert|balance.*update|credit.*card.*statement/i,
+  /paypal.*receipt|venmo.*notif|cash.*app.*notif/i,
+  /your.*bill.*is.*ready|payment.*received.*thank/i,
+  // 快递/订单
+  /order.*confirm|ship.*confirm|tracking.*number|your.*order.*#/i,
+  /amazon\.com.*order|package.*delivered|delivery.*update/i,
+  /receipt.*from|thank.*you.*for.*your.*purchase|invoice.*#/i,
+  // 软件订阅
+  /subscription.*renew|your.*subscription|trial.*ending|plan.*upgrade/i,
+  /billing.*receipt|payment.*receipt.*#/i,
+  // 垃圾/广告
+  /newsletter|weekly.*digest|monthly.*roundup|webinar|free.*ebook/i,
+  /limited.*time.*offer|act.*now|don't.*miss.*out|exclusive.*deal/i,
+  /sale.*off|discount.*code|promo.*code|clearance/i,
+  /SEO.*audit|backlink|guest.*post|sponsor|traffic.*to.*your/i,
+  // 系统通知
+  /password.*reset.*request|verify.*your.*email|confirm.*your.*account/i,
+  /security.*alert.*login|new.*sign.*in|unusual.*activity/i,
+  /do.*not.*reply.*automated|noreply|no-reply|donotreply/i,
+  /mailer.*daemon|undelivered.*mail|delivery.*status.*notification/i,
+  // 非摄影类咨询
+  /website.*design|SEO.*services|app.*development|virtual.*assistant/i,
+  /life.*insurance|health.*insurance|car.*insurance/i,
+];
+
+export function isBusinessEmail(subject: string, body: string, fromAddress: string): {
+  isBusiness: boolean;
+  reason?: string;
+} {
+  const text = (subject + ' ' + body.slice(0, 1000) + ' ' + fromAddress).toLowerCase();
+
+  for (const pattern of NON_BUSINESS_PATTERNS) {
+    if (pattern.test(text)) {
+      return { isBusiness: false, reason: 'non-business notification or automated email' };
+    }
+  }
+
+  // Must contain at least ONE photography-related signal to be considered business
+  const bizSignals = [
+    /photograph|photo|shoot|wedding|portrait|headshot|event.*photo/i,
+    /picture|image|gallery|album|print|retouch|edit/i,
+    /booking|schedule|date|availability|package|pricing|quote|rate/i,
+    /contract|invoice|deposit|retainer|payment.*photo/i,
+    /bride|groom|ceremony|reception|engagement|elopement/i,
+    /maternity|newborn|family.*photo|graduation.*photo|birthday.*photo/i,
+    /session|coverage|hour.*photo|full.*day|half.*day/i,
+    /\b拍摄\b|\b拍照\b|\b摄影\b|\b写真\b|\b婚纱\b|\b婚礼\b|\b跟拍\b/i,
+    /\b修图\b|\b精修\b|\b底片\b|\b样片\b|\b选片\b/i,
+  ];
+
+  const hasBizSignal = bizSignals.some(p => p.test(text));
+
+  if (!hasBizSignal) {
+    // Allow if sender is a known client (from address matches client email pattern)
+    if (/@(gmail|outlook|yahoo|hotmail|qq|163|126|icloud|proton)/i.test(fromAddress)) {
+      // Personal email — could be a client inquiry even without photo keywords
+      const inquirySignals = /how much|price|cost|available|book|reserve|date|when are you/i;
+      if (inquirySignals.test(text)) {
+        return { isBusiness: true };
+      }
+    }
+    return { isBusiness: false, reason: 'no photography-related content detected' };
+  }
+
+  return { isBusiness: true };
+}
+
+// ── 增强实体提取 — 服化道 + 风格 + 档期 ──
+
+export interface EnhancedEntity {
+  type: 'date' | 'time' | 'location' | 'budget' | 'guest_count' | 'hours' |
+        'clothing' | 'makeup' | 'props' | 'style' | 'venue' | 'timeline';
+  value: string;
+  confidence: number;
+}
+
+/**
+ * Extract photography-specific entities from client messages
+ * Goes beyond budget/date to capture 服化道、风格、档期
+ */
+export function extractEnhancedEntities(subject: string, body: string): EnhancedEntity[] {
+  const text = (subject + ' ' + body).toLowerCase();
+  const entities: EnhancedEntity[] = [];
+
+  // ── 日期 ──
+  const datePatterns = [
+    /(\d{4}[-/]\d{1,2}[-/]\d{1,2})/,
+    /(\d{1,2}月\d{1,2}[日号])/,
+    /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*\d{4}/i,
+  ];
+  for (const p of datePatterns) {
+    const m = text.match(p);
+    if (m) { entities.push({ type: 'date', value: m[1], confidence: 0.9 }); break; }
+  }
+
+  // ── 时间/时段 ──
+  const timePatterns = [
+    /(\d{1,2}:\d{2})\s*(?:am|pm|上午|下午)?/i,
+    /(?:早上|上午|中午|下午|傍晚|晚上)(\d{1,2}[点時])?/,
+    /(?:at|from)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i,
+  ];
+  for (const p of timePatterns) {
+    const m = text.match(p);
+    if (m) { entities.push({ type: 'time', value: m[1] || m[0], confidence: 0.85 }); break; }
+  }
+
+  // ── 服装 (Clothing) ──
+  const clothingPatterns: [RegExp, string][] = [
+    [/婚纱|wedding.*dress|白纱|礼服|gown|tuxedo|suit|西装|旗袍|汉服|和服/i, 'formal attire mentioned'],
+    [/伴娘.*服|bridesmaid.*dress/i, 'bridesmaid dresses'],
+    [/便装|causal|休闲/i, 'casual wear preferred'],
+    [/多套.*衣服|换.*套|(\d+).*套.*衣服|(\d+).*outfits/i, '$1 outfits'],
+  ];
+  for (const [p, label] of clothingPatterns) {
+    if (p.test(text)) { entities.push({ type: 'clothing', value: label, confidence: 0.8 }); break; }
+  }
+
+  // ── 化妆造型 (Makeup) ──
+  if (/化妆|makeup|造型|发型|hair.*stylist|妆面|粉底|眼影|口红/i.test(text)) {
+    const detail = text.match(/化妆.*?(?:。|\.|$)|makeup.*?(?:\.|$)|造型.*?(?:。|\.|$)/i)?.[0] || 'makeup requested';
+    entities.push({ type: 'makeup', value: detail.slice(0, 60), confidence: 0.8 });
+  }
+
+  // ── 道具 (Props) ──
+  if (/道具|props|气球|balloon|花束|bouquet|烛台|candle|牌子|sign|横幅|banner|烟花|sparkler|泡泡|bubble/i.test(text)) {
+    const props = text.match(/道具.*?(?:。|\.|$)|props.*?(?:\.|$)|气球|balloon|花束|bouquet|烟花|sparkler/gi);
+    entities.push({ type: 'props', value: props?.[0]?.slice(0, 60) || 'props mentioned', confidence: 0.75 });
+  }
+
+  // ── 拍摄风格 (Style) ──
+  const styleMap: [RegExp, string][] = [
+    [/复古|vintage|retro|胶片|film.*style/i, 'vintage/film'],
+    [/小清新|清新|自然|natural.*light|户外|outdoor|森系/i, 'natural/outdoor'],
+    [/大片|时尚|fashion|杂志|magazine|editorial/i, 'fashion/editorial'],
+    [/纪实|documentary|抓拍|candid|journalistic/i, 'documentary/candid'],
+    [/韩式|korean.*style|日系|japanese.*style/i, 'korean/japanese style'],
+    [/黑白|black.*white|暗黑|dark.*moody/i, 'black&white/moody'],
+    [/明亮|bright.*airy|light.*airy|高调/i, 'bright & airy'],
+  ];
+  for (const [p, label] of styleMap) {
+    if (p.test(text)) { entities.push({ type: 'style', value: label, confidence: 0.8 }); break; }
+  }
+
+  // ── 场地 (Venue) ──
+  const venuePatterns = [
+    /venue.*?(?:is|at|name|called)\s+["']?([^"',.]+)["']?/i,
+    /在\s*(.{2,10}?(?:酒店|庄园|草坪|海滩|教堂|工作室|studio))\s*(?:举办|拍摄|举行)/,
+    /(?:at|@)\s+(.{2,20}?(?:hotel|resort|farm|beach|garden|studio|park))/i,
+  ];
+  for (const p of venuePatterns) {
+    const m = text.match(p);
+    if (m) { entities.push({ type: 'venue', value: m[1].trim(), confidence: 0.85 }); break; }
+  }
+
+  // ── 档期流程 (Timeline) ──
+  const timelineItems: string[] = [];
+  if (/first.*look|first.*see|仪式前|婚礼前.*见面/i.test(text)) timelineItems.push('first look');
+  if (/ceremony|仪式|交换.*戒指|vows/i.test(text)) timelineItems.push('ceremony');
+  if (/reception|宴会|晚宴|酒席|dinner|cocktail/i.test(text)) timelineItems.push('reception');
+  if (/getting.*ready|化妆.*准备|prep/i.test(text)) timelineItems.push('getting ready');
+  if (/portrait.*session|formal.*photo|合影|合照/i.test(text)) timelineItems.push('formal portraits');
+  if (/send.*off|退场|exit|sparkler.*exit/i.test(text)) timelineItems.push('send-off');
+  if (/cake.*cutting|切蛋糕|first.*dance|第一支舞/i.test(text)) timelineItems.push('cake/dance');
+  if (timelineItems.length > 0) {
+    entities.push({ type: 'timeline', value: timelineItems.join(', '), confidence: 0.7 });
+  }
+
+  // ── 人数 ──
+  const guestPatterns = [/(\d+)\s*(?:guests?|people|persons|位|人|个)/i, /guests?.*?(\d+)/i];
+  for (const p of guestPatterns) {
+    const m = text.match(p);
+    if (m) { entities.push({ type: 'guest_count', value: m[1], confidence: 0.8 }); break; }
+  }
+
+  return entities;
+}

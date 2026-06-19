@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { fetchRecentMessages, type EmailConfig } from '../adapters/email.js';
-import { classifyMessage } from '../ai/engine.js';
+import { classifyMessage, isBusinessEmail, extractEnhancedEntities } from '../ai/engine.js';
 import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
 import { notifyMessage, notifyClientUpdated } from '../utils/events.js';
@@ -37,6 +37,15 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
 
           const fromEmail = extractEmail(msg.from || '');
           const cleanBody = stripHtml(msg.body || '');
+
+          // 🔒 非业务邮件过滤 — 社交媒体通知/银行账单/广告等直接跳过
+          const bizCheck = isBusinessEmail(msg.subject || '', cleanBody, fromEmail);
+          if (!bizCheck.isBusiness) {
+            if (bizCheck.reason !== 'no photography-related content detected') {
+              // Only log filtered non-business emails, not personal emails without photo context
+            }
+            continue;
+          }
 
           // Find or create client
           let clientId: string | null = null;
@@ -148,43 +157,83 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
             try { notifyClientUpdated(uid, clientId, 'engaged'); } catch {}
           }
 
-          // ── AI entity extraction → auto-fill client profile ──
+          // ── 增强实体提取 → 服化道/风格/档期 → 客户面板 ──
           try {
-            const { extractEntities } = await import('../ai/rules-engine.js');
-            const entities = extractEntities(cleanBody, msg.subject || '');
+            const entities = extractEnhancedEntities(msg.subject || '', cleanBody);
             if (entities.length > 0 && clientId) {
               const client = queryOne('SELECT * FROM clients WHERE id = ?', [clientId]) as any;
+              const meta = JSON.parse(client?.metadata || '{}');
+
+              // 初始化 insights 数组
+              if (!meta.insights) meta.insights = [];
+
               for (const entity of entities) {
                 switch (entity.type) {
                   case 'date':
-                    if (!client?.shoot_date && entity.value)
+                    if (!client?.shoot_date) {
                       run("UPDATE clients SET shoot_date=?, updated_at=datetime('now') WHERE id=?", [entity.value, clientId]);
-                    break;
-                  case 'budget':
-                    // 🔒 安全：budget 提取不准，不自动归档
-                    break;
-                  case 'location':
-                  case 'guest_count':
-                  case 'hours':
-                  case 'requirement': {
-                    const meta = JSON.parse(client?.metadata || '{}');
-                    if (!meta[entity.type]) {
-                      meta[entity.type] = entity.value;
-                      run("UPDATE clients SET metadata=?, updated_at=datetime('now') WHERE id=?", [JSON.stringify(meta), clientId]);
+                      meta.insights.push({ type: 'date', value: entity.value, extractedAt: new Date().toISOString() });
                     }
                     break;
-                  }
-                }
-                if (entity.type === 'requirement' && client && !client.type) {
-                  const { detectShootType } = await import('../ai/rules-engine.js');
-                  const detectedType = detectShootType(cleanBody.toLowerCase());
-                  if (detectedType)
-                    run("UPDATE clients SET type=?, updated_at=datetime('now') WHERE id=?", [detectedType, clientId]);
+                  case 'clothing':
+                  case 'makeup':
+                  case 'props':
+                    // 服化道 → 存储到 insights
+                    if (!meta[entity.type]) {
+                      meta[entity.type] = entity.value;
+                      meta.insights.push({ type: entity.type, value: entity.value, extractedAt: new Date().toISOString() });
+                    }
+                    break;
+                  case 'style':
+                    if (!meta.style) {
+                      meta.style = entity.value;
+                      meta.insights.push({ type: 'style', value: entity.value, extractedAt: new Date().toISOString() });
+                    }
+                    break;
+                  case 'venue':
+                    if (!meta.location) {
+                      meta.location = entity.value;
+                      meta.insights.push({ type: 'venue', value: entity.value, extractedAt: new Date().toISOString() });
+                    }
+                    break;
+                  case 'timeline':
+                    if (!meta.timeline) {
+                      meta.timeline = entity.value;
+                      meta.insights.push({ type: 'timeline', value: entity.value, extractedAt: new Date().toISOString() });
+                    }
+                    break;
+                  case 'guest_count':
+                    if (!meta.guest_count) {
+                      meta.guest_count = entity.value;
+                      meta.insights.push({ type: 'guest_count', value: entity.value, extractedAt: new Date().toISOString() });
+                    }
+                    break;
+                  default:
+                    if (!meta[entity.type]) {
+                      meta[entity.type] = entity.value;
+                    }
                 }
               }
-              if (entities.length > 0) console.log('[EmailWatcher] 📊 Extracted', entities.length, 'entities for client', fromEmail);
+
+              // 自动检测拍摄类型
+              if (!client?.type) {
+                const { detectShootType } = await import('../ai/rules-engine.js');
+                const detectedType = detectShootType(cleanBody.toLowerCase());
+                if (detectedType) {
+                  run("UPDATE clients SET type=?, updated_at=datetime('now') WHERE id=?", [detectedType, clientId]);
+                  meta.insights.push({ type: 'shoot_type', value: detectedType, extractedAt: new Date().toISOString() });
+                }
+              }
+
+              // 限制 insights 最多 20 条
+              if (meta.insights.length > 20) meta.insights = meta.insights.slice(-20);
+              run("UPDATE clients SET metadata=?, updated_at=datetime('now') WHERE id=?", [JSON.stringify(meta), clientId]);
+
+              if (entities.length > 0) console.log('[EmailWatcher] 📊 Extracted', entities.length, 'entities → client profile for', fromEmail);
             }
-          } catch {}
+          } catch (err) {
+            console.warn('[EmailWatcher] Entity extraction failed:', (err as Error).message);
+          }
 
           // Build subject with AI tags
           let taggedSubject = msg.subject || '';
