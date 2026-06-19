@@ -137,6 +137,38 @@ export default function Clients() {
           </div>
         </div>
 
+        {/* 🤖 AI 提取的关键信息 */}
+        {Array.isArray((client as any).insights) && (client as any).insights.length > 0 && (
+          <div style={{ background: 'linear-gradient(135deg, #F0F7FF, #F5F0FF)', borderRadius: 14, padding: 16, marginBottom: 16, border: '1px solid #E8E0F0' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#5856D6', marginBottom: 10, letterSpacing: '.5px' }}>🤖 AI 提取的关键信息</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(client as any).insights.map((item: any, i: number) => {
+                const iconMap: Record<string, string> = {
+                  date: '📅', time: '⏰', venue: '🏛', location: '📍', style: '🎨',
+                  clothing: '👗', makeup: '💄', props: '🎪', timeline: '⏱',
+                  guest_count: '👥', shoot_type: '📸', budget: '💰',
+                };
+                const labelMap: Record<string, string> = {
+                  date: '日期', time: '时间', venue: '场地', location: '地点', style: '风格',
+                  clothing: '服装', makeup: '化妆', props: '道具', timeline: '流程',
+                  guest_count: '人数', shoot_type: '类型', budget: '预算',
+                };
+                return (
+                  <span key={i} style={{
+                    background: '#fff', borderRadius: 8, padding: '6px 12px',
+                    fontSize: 12, fontWeight: 500, color: '#1D1D1F',
+                    border: '1px solid #E5E0F0', display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <span>{iconMap[item.type] || '💡'}</span>
+                    <span style={{ color: '#86868B', fontSize: 10 }}>{labelMap[item.type] || item.type}</span>
+                    <span>{item.value}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Timeline — aggregated events */}
         {detail.timeline && detail.timeline.length > 0 && (
           <div style={{ marginBottom: 16 }}>
