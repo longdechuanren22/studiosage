@@ -11,7 +11,6 @@ interface NavItem { to: string; icon: string; labelKey: string; }
 const navItems: NavItem[] = [
   { to: '/', icon: '◧', labelKey: 'nav.dashboard' },
   { to: '/clients', icon: '👥', labelKey: 'nav.clients' },
-  { to: '/invoices', icon: '📄', labelKey: 'nav.invoices' },
   { to: '/projects', icon: '🎬', labelKey: 'nav.projects' },
   { to: '/connect', icon: '📬', labelKey: 'nav.connect' },
   { to: '/settings', icon: '⚙', labelKey: 'nav.settings' },

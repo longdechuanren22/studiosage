@@ -453,6 +453,10 @@ const NON_BUSINESS_PATTERNS: RegExp[] = [
   // 非摄影类咨询
   /website.*design|SEO.*services|app.*development|virtual.*assistant/i,
   /life.*insurance|health.*insurance|car.*insurance/i,
+  // TikTok Shop /电商
+  /tiktok.*shop|tiktok.*order|tiktok.*seller|etsy.*order|shopify.*order/i,
+  /your.*shop.*order|new.*order.*#|order.*confirmed.*#/i,
+  /aliexpress|temu|shein.*order|wish.*order/i,
 ];
 
 export function isBusinessEmail(subject: string, body: string, fromAddress: string): {
@@ -467,34 +471,29 @@ export function isBusinessEmail(subject: string, body: string, fromAddress: stri
     }
   }
 
-  // Must contain at least ONE photography-related signal to be considered business
-  const bizSignals = [
-    /photograph|photo|shoot|wedding|portrait|headshot|event.*photo/i,
-    /picture|image|gallery|album|print|retouch|edit/i,
-    /booking|schedule|date|availability|package|pricing|quote|rate/i,
-    /contract|invoice|deposit|retainer|payment.*photo/i,
-    /bride|groom|ceremony|reception|engagement|elopement/i,
-    /maternity|newborn|family.*photo|graduation.*photo|birthday.*photo/i,
-    /session|coverage|hour.*photo|full.*day|half.*day/i,
-    /\b拍摄\b|\b拍照\b|\b摄影\b|\b写真\b|\b婚纱\b|\b婚礼\b|\b跟拍\b/i,
-    /\b修图\b|\b精修\b|\b底片\b|\b样片\b|\b选片\b/i,
-  ];
-
-  const hasBizSignal = bizSignals.some(p => p.test(text));
-
-  if (!hasBizSignal) {
-    // Allow if sender is a known client (from address matches client email pattern)
-    if (/@(gmail|outlook|yahoo|hotmail|qq|163|126|icloud|proton)/i.test(fromAddress)) {
-      // Personal email — could be a client inquiry even without photo keywords
-      const inquirySignals = /how much|price|cost|available|book|reserve|date|when are you/i;
-      if (inquirySignals.test(text)) {
-        return { isBusiness: true };
-      }
-    }
-    return { isBusiness: false, reason: 'no photography-related content detected' };
+  // 🔄 修复：不再要求摄影关键词。来自个人邮箱的邮件一律视为潜在客户。
+  const isPersonalSender = /@(gmail|outlook|yahoo|hotmail|qq|163|126|icloud|proton|protonmail|mail\.com|zoho|fastmail)/i.test(fromAddress);
+  if (isPersonalSender) {
+    return { isBusiness: true };
   }
 
-  return { isBusiness: true };
+  // 企业域名 → 需要至少一个业务信号
+  const bizSignals = [
+    /photograph|photo|shoot|wedding|portrait|headshot/i,
+    /picture|image|gallery|album|print|retouch|edit/i,
+    /booking|schedule|date|availability|package|pricing|quote|rate/i,
+    /contract|invoice|deposit|retainer/i,
+    /bride|groom|ceremony|reception|engagement|elopement/i,
+    /maternity|newborn|family.*photo|graduation/i,
+    /\b拍摄\b|\b拍照\b|\b摄影\b|\b写真\b|\b婚纱\b|\b婚礼\b|\b跟拍\b/i,
+    /\b修图\b|\b精修\b|\b底片\b|\b样片\b|\b选片\b/i,
+    /how much|price|cost|available|inquiry|interest|services/i,
+  ];
+  if (bizSignals.some(p => p.test(text))) {
+    return { isBusiness: true };
+  }
+
+  return { isBusiness: false, reason: 'corporate domain without photography-related content' };
 }
 
 // ── 增强实体提取 — 服化道 + 风格 + 档期 ──

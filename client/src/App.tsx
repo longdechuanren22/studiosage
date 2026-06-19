@@ -41,7 +41,6 @@ export default function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/projects" element={<Projects />} />
-                <Route path="/invoices" element={<Invoices />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/connect" element={<Connect />} />
                 <Route path="/onboarding" element={<Onboarding />} />

@@ -235,6 +235,28 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
             console.warn('[EmailWatcher] Entity extraction failed:', (err as Error).message);
           }
 
+          // ── 邮件↔修片联动：检测活跃项目 → 智能标签 ──
+          let linkedProjectId: string | null = null;
+          if (clientId) {
+            const activeProject = queryOne(
+              `SELECT id, title, status FROM projects
+               WHERE client_id = ? AND user_id = ? AND status NOT IN ('completed','cancelled')
+               ORDER BY updated_at DESC LIMIT 1`,
+              [clientId, uid]
+            ) as any;
+            if (activeProject) {
+              linkedProjectId = activeProject.id;
+              // 检测邮件是否涉及当前项目的修片/选片
+              const photoKeywords = /photo|picture|image|gallery|选片|修图|精修|交付|样片|download|review|edit|retouch/i;
+              if (photoKeywords.test(cleanBody + (msg.subject || ''))) {
+                // 自动补充项目上下文到 AI 回复
+                if (!aiReply.includes('project') && !aiReply.includes('项目')) {
+                  aiReply = aiReply + ` (关于您的${activeProject.title}项目，当前状态：${activeProject.status})`;
+                }
+              }
+            }
+          }
+
           // Build subject with AI tags
           let taggedSubject = msg.subject || '';
           const tags: string[] = [];
@@ -258,6 +280,7 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
               id: msgId, from_address: msg.from, subject: taggedSubject,
               client_id: clientId, category, status: 'pending',
               sentiment, pricingIntent, needsImmediateAttention,
+              linkedProjectId,
             });
             notifyClientUpdated(uid, clientId!, 'engaged');
           } catch {}
