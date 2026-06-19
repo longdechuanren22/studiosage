@@ -47,8 +47,8 @@ async function tryStartEmailWatcher() {
       const password = conn.refresh_token_encrypted ? decrypt(conn.refresh_token_encrypted) : '';
       if (cfg.email) {
         const { startEmailWatcher } = await import('./workers/email-watcher.js');
-        startEmailWatcher({ ...cfg, password }, 0, conn.user_id); // 0=IDLE mode (real-time, no polling)
-        logger.info(`Auto-started real-time email watcher (IMAP IDLE) for ${cfg.email}`);
+        startEmailWatcher({ ...cfg, password }, 15000, conn.user_id);
+        logger.info(`Auto-started email watcher (polling ${cfg.email})`);
       }
     }
   } catch (err) {
@@ -109,6 +109,14 @@ if (fs.existsSync(clientDist)) {
 
 app.use(notFound);
 app.use(errorHandler);
+
+// Crash protection — log and continue instead of killing process
+process.on('uncaughtException', (err) => {
+  logger.error('UNCAUGHT EXCEPTION:', err.message, err.stack?.split('\n').slice(0, 3).join(' | '));
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('UNHANDLED REJECTION:', reason);
+});
 
 app.listen(PORT, () => {
   logger.info(`StudioSage API running on http://localhost:${PORT}`);

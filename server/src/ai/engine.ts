@@ -96,15 +96,8 @@ export interface GenerateInvoiceParams {
 }
 
 export async function generateInvoiceData(params: GenerateInvoiceParams) {
-  if (!USE_AI) return generateInvoiceOffline(params);
-  try {
-    const prompt = `Generate photography invoice JSON. Input: ${JSON.stringify(params)}. Include line items, retainer label, 3-phase schedule if applicable.`;
-    const text = await callAI(prompt, 500, 0.2);
-    return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
-  } catch (err) {
-    console.error('[AI] generateInvoiceData failed, using offline:', (err as Error).message);
-    return generateInvoiceOffline(params);
-  }
+  // 🔒 安全：发票金额是合同——AI 不构造合同内容，完全用离线模板
+  return generateInvoiceOffline(params);
 }
 
 // ── 选片→修图→交付 AI 智能化 ──
@@ -259,26 +252,26 @@ export async function draftPaymentReminder(ctx: PaymentContext): Promise<string>
       : ctx.daysOverdue <= 30 ? 'formal payment demand, getting serious'
       : 'final notice before potential legal action';
 
-    const prompt = `You are a photographer who needs to ask a client for payment. The key requirement: maintain professionalism and warmth — NEVER sound like debt collection.
+    const prompt = `You are a photographer reminding a client about a payment. The key requirement: maintain professionalism and warmth — NEVER sound like debt collection.
 
 Context:
 - Client: ${ctx.clientName}
 - Project: ${ctx.projectTitle}
-- Amount: ${ctx.currency || '¥'}${ctx.amount}
-- Payment: ${ctx.paymentType}
+- Payment type: ${ctx.paymentType}
 - Days since due: ${ctx.daysOverdue} (${urgency})
 
 Write a ${urgency} message in Chinese. Rules:
-- Keep under 120 characters
+- Keep under 100 characters
 - Never use aggressive language (讨债语气)
 - Frame it as a "friendly reminder" even when late
-- Include payment amount naturally
+- Use [金额] as a placeholder for the payment amount (do NOT write a specific number)
 - End with [摄影师姓名]
 
 Output the message text only, no JSON.`;
 
     const text = await callAI(prompt, 250, 0.5);
-    return text.trim();
+    // 🔒 安全：AI 不直接写金额。金额从 DB 取，替换 AI 的占位符
+    return text.trim().replace('[金额]', `${ctx.currency || '¥'}${ctx.amount}`);
   } catch (err) {
     console.error('[AI] draftPaymentReminder failed:', (err as Error).message);
     return draftPaymentTemplate(ctx);

@@ -94,8 +94,25 @@ router.post('/:id/send', async (req, res) => {
   const cfg = JSON.parse(connData.access_token_encrypted || '{}');
   const password = connData.refresh_token_encrypted ? decrypt(connData.refresh_token_encrypted) : '';
 
+  // 🔒 安全：AI草稿必须人工确认后才能发送
+  const { confirmDraft } = req.body;
+  if (!customText && msgData.ai_reply && !confirmDraft) {
+    return res.status(400).json({
+      error: 'AI生成的回复需要人工确认。请编辑后发送，或添加 confirmDraft 标记。',
+      code: 'AI_DRAFT_CONFIRMATION_REQUIRED',
+    });
+  }
+
   const replyText = customText || msgData.ai_reply || '';
   const subject = msgData.subject || '';
+
+  // 🔒 安全：扫描AI生成内容中的金额关键词
+  if (!customText && msgData.ai_reply) {
+    const moneyPattern = /\$\d{1,6}(,\d{3})*(\.\d{2})?|USD\s*\d+|价格|费用|报价|打折|优惠|折扣|free|charge|fee|price|cost/i;
+    if (moneyPattern.test(msgData.ai_reply)) {
+      console.warn('[Send] ⚠️ AI reply contains price/amount keywords — photographer should review:', msgData.subject);
+    }
+  }
 
   try {
     await sendReply({ ...cfg, password }, msgData.from_address, subject, replyText);

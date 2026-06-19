@@ -294,31 +294,9 @@ function generateSmartReply(body: string, subject: string, stage: string, ctx?: 
       reply += `Thanks for reaching out! `;
     }
 
-    // Respond to specific questions with accurate pricing
+    // 🔒 安全：AI 不报具体价格。引导客户查看摄影师自设的套餐页面。
     if (hasBudget && shootType) {
-      const prices: Record<string, string> = {
-        // Based on real market data from US/UK/AU/EU photographer websites
-        wedding: 'Wedding collections from $2,400 (8hrs, 2 photographers, 600+ images). Most popular: $3,500 all-day.',
-        portrait: 'Portrait sessions from $350 (1hr, 30+ edited images).',
-        headshot: 'Headshot sessions from $200 (2 looks, 5 retouched images).',
-        child: 'Family sessions from $400 (1hr, 40+ images). Mini sessions from $250 (30min).',
-        newborn: 'Newborn sessions from $450 (2hrs, props/wraps included, 25+ edited images).',
-        birthday: 'Birthday coverage from $500 (3hrs, 100+ images, online gallery).',
-        maternity: 'Maternity sessions from $400 (1hr, 30+ images, outdoor or studio).',
-        event: 'Event coverage from $1,200 (4hrs, 200+ images). Corporate events from $1,800.',
-        graduation: 'Graduation sessions from $300 (1hr, 25+ edited images).',
-        pet: 'Pet sessions from $250 (1hr, 20+ images, outdoor or at-home).',
-        concert: 'Concert photography from $600 (3hrs, 150+ images).',
-        sports: 'Sports coverage from $500 (game/event, 100+ action shots).',
-        commercial: 'Commercial day rates from $1,500. Per-image licensing available.',
-        food: 'Food photography from $400/session (10-15 dishes) or $1,200 full day.',
-        fashion: 'Fashion/editorial day rates from $1,800. Test shoots from $500.',
-        realestate: 'Real estate from $175/property (25 HDR photos). Twilight +$100.',
-        boudoir: 'Boudoir sessions from $450 (2hrs, 40+ images, professional hair & makeup included).',
-        aerial: 'Drone/aerial add-on from $300. Standalone aerial from $500.',
-        elopement: 'Elopement packages from $1,500 (4hrs, 200+ images).',
-      };
-      reply += prices[shootType] || 'I\'d be happy to share my pricing with you. ';
+      reply += 'I have packages for this type of shoot — I\'d be happy to send you a custom proposal once I understand your needs better. ';
     }
 
     // ── Seasonal awareness ──
