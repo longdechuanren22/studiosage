@@ -37,7 +37,7 @@ router.get('/:id', async (req, res) => {
   res.json(invoice);
 });
 
-// Generate a new invoice (AI-powered)
+// Generate a new invoice (AI-powered) with sequential numbering
 router.post('/generate', async (req, res) => {
   await initDb();
   const userId = req.userId!;
@@ -45,6 +45,15 @@ router.post('/generate', async (req, res) => {
   if (!clientName || !amount) return res.status(400).json({ ok: false, error: 'Client name and amount are required' });
 
   const id = uuid();
+
+  // Sequential invoice number: INV-{year}-{seq:04d}
+  const year = new Date().getFullYear();
+  const lastInv = queryOne(
+    "SELECT invoice_number FROM invoices WHERE user_id = ? AND invoice_number LIKE 'INV-' || ? || '-%' ORDER BY invoice_number DESC LIMIT 1",
+    [userId, String(year)]
+  ) as any;
+  const seq = lastInv?.invoice_number ? parseInt(lastInv.invoice_number.split('-').pop() || '0') + 1 : 1;
+  const invoiceNumber = `INV-${year}-${String(seq).padStart(4, '0')}`;
 
   const aiData = await generateInvoiceData({
     photographerName: req.body.photographerName || 'Photographer',
@@ -64,14 +73,14 @@ router.post('/generate', async (req, res) => {
 
   run(
     `INSERT INTO invoices (id, user_id, client_id, client_name, client_email, amount, currency,
-      description, items, payment_schedule, retainer_type, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      description, items, payment_schedule, retainer_type, status, invoice_number)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, userId, clientId, clientName, clientEmail, Number(amount), currency || 'USD',
       `${packageType || 'Service'} — ${clientName}`, JSON.stringify(aiData.items),
-      paymentSchedule || 'single', aiData.retainerLabel || null, 'draft']
+      paymentSchedule || 'single', aiData.retainerLabel || null, 'draft', invoiceNumber]
   );
 
-  res.status(201).json({ id, ...aiData });
+  res.status(201).json({ id, invoiceNumber, ...aiData });
 });
 
 // Send invoice: generate Stripe payment link and mark as sent

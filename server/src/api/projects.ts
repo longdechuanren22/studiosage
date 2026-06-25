@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
 import { checkProjectLimit } from '../middleware/paywall.js';
+import { validate, createProjectSchema, updateProjectSchema } from '../middleware/validate.js';
 
 async function emitProjectUpdate(userId: string, projectId: string, status: string) {
   try {
@@ -78,17 +79,6 @@ router.get('/:id', async (req, res) => {
     [p.id]
   );
 
-  // Get linked proposal if exists (table may not exist after cleanup)
-  let proposal = null;
-  if (p.proposal_id) {
-    try {
-      proposal = queryOne(
-        `SELECT id, title, packages, pricing, status FROM proposals WHERE id = ? AND user_id = ?`,
-        [p.proposal_id, userId]
-      );
-    } catch { /* proposals table removed */ }
-  }
-
   res.json({
     ...p,
     gallery: gallery ? {
@@ -102,43 +92,27 @@ router.get('/:id', async (req, res) => {
       ...r,
       deliveredPhotos: JSON.parse(r.delivered_photos || '[]'),
     })),
-    proposal,
+    proposal: null,
   });
 });
 
 // ── Create project ──
-router.post('/', checkProjectLimit, async (req, res) => {
+router.post('/', checkProjectLimit, validate(createProjectSchema), async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const { clientId, title, shootType, shootDate, deliveryDueDate, packageType, proposalId } = req.body;
-
-  if (!title) return res.status(400).json({ error: '项目名称不能为空' });
-  if (!clientId) return res.status(400).json({ error: '请选择客户' });
 
   // Verify client belongs to user
   const client = queryOne('SELECT id FROM clients WHERE id = ? AND user_id = ?', [clientId, userId]);
   if (!client) return res.status(404).json({ error: '客户不存在' });
 
   const defaults = PACKAGE_DEFAULTS[packageType] || PACKAGE_DEFAULTS.Standard;
+  const maxRetouch = defaults.retouch;
+  const maxRevisions = defaults.revisions;
 
-  // If proposalId provided, pull package info from proposal
-  let maxRetouch = defaults.retouch;
-  let maxRevisions = defaults.revisions;
+  // If proposalId provided, store for future proposal feature
   if (proposalId) {
-    try {
-      const proposal = queryOne('SELECT packages FROM proposals WHERE id = ? AND user_id = ?', [proposalId, userId]) as any;
-      if (proposal) {
-        const packages = JSON.parse(proposal.packages || '[]');
-        const selectedPkg = packages.find((pkg: any) => pkg.name === packageType);
-        if (selectedPkg?.includes) {
-          const includes = selectedPkg.includes.join(' ').toLowerCase();
-          const retouchMatch = includes.match(/(\d+)\s*(?:edited|retouched|精修|张)/);
-          const revisionMatch = includes.match(/(\d+)\s*(?:round|轮|revision)/);
-          if (retouchMatch) maxRetouch = parseInt(retouchMatch[1]);
-          if (revisionMatch) maxRevisions = parseInt(revisionMatch[1]);
-        }
-      }
-    } catch { /* proposals table removed — use defaults */ }
+    // proposal linking reserved for future implementation
   }
 
   const id = randomUUID();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { useI18n } from '../i18n';
+import { t } from '../i18n';
 
 interface ProviderInfo {
   key: string; name: string; helpUrl: string; setupGuide: string;
@@ -15,18 +15,6 @@ interface DetectResult {
 type Step = 'start' | 'oauth' | 'authcode' | 'password' | 'done';
 
 export default function Connect() {
-  const { lang } = useI18n();
-  const L = {
-    connectTitle: lang === 'zh' ? '连接你的工作邮箱' : 'Connect Your Work Email',
-    connectSub: lang === 'zh' ? 'AI 自动读取邮件、分类客户消息、起草回复' : 'AI reads emails, classifies clients, drafts replies',
-    emailLabel: lang === 'zh' ? '工作邮箱地址' : 'Work Email Address',
-    supported: lang === 'zh' ? '支持哪些邮箱？' : 'Supported Providers',
-    next: lang === 'zh' ? '下一步' : 'Next',
-    done: lang === 'zh' ? '已连接 · AI 正在监控收件箱' : 'Connected · AI monitoring inbox',
-    disconnect: lang === 'zh' ? '断开' : 'Disconnect',
-    dashboard: lang === 'zh' ? '返回面板' : 'Back to Dashboard',
-    otherTools: lang === 'zh' ? '其他集成' : 'Other Integrations',
-  };
   const [status, setStatus] = useState<Record<string, any>>({});
   const [step, setStep] = useState<Step>('start');
   const [email, setEmail] = useState('');
@@ -115,12 +103,12 @@ export default function Connect() {
       <div style={{ maxWidth: 420, margin: '0 auto', padding: '0 16px' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📬</div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.3px', margin: '0 0 4px' }}>{L.connectTitle}</h2>
-          <p style={{ fontSize: 13, color: '#86868B', margin: 0 }}>{L.connectSub}</p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.3px', margin: '0 0 4px' }}>{t('connect.title')}</h2>
+          <p style={{ fontSize: 13, color: '#86868B', margin: 0 }}>{t('connect.subtitle')}</p>
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>{L.emailLabel}</label>
+          <label style={labelStyle}>{t('connect.emailLabel')}</label>
           <input type="email" value={email}
             onChange={e => setEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && email.includes('@') && handleDetect()}
@@ -129,7 +117,7 @@ export default function Connect() {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B', marginBottom: 8 }}>支持哪些邮箱？</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B', marginBottom: 8 }}>{t('connect.supported')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
             {quickProviders.map(qp => (
               <button key={qp.domain} onClick={() => { setEmail(qp.sample); handleDetect(qp.sample); }}
@@ -145,7 +133,7 @@ export default function Connect() {
         </div>
 
         <button onClick={() => handleDetect()} disabled={!email.includes('@')} style={btnStyle(email.includes('@'))}>
-          下一步
+          {t('connect.next')}
         </button>
 
         {status.email?.connected && <ConnectedBanner email={status.email.email} onDisconnect={handleDisconnect} />}
@@ -163,19 +151,19 @@ export default function Connect() {
 
         <div style={cardStyle}>
           <p style={{ fontSize: 14, color: '#1D1D1F', lineHeight: 1.6, marginBottom: 16 }}>
-            使用 <strong>{p.name}</strong> 账号一键授权，无需输入密码。
+            {t('connect.oauth').replace('{provider}', p.name)}
           </p>
 
           <button disabled style={{ ...btnStyle(true), background: providerColor(p.key) }}>
-            🚧 OAuth 授权（开发中）
+            🚧 {t('connect.oauthDev')}
           </button>
 
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '.5px solid rgba(0,0,0,.06)', textAlign: 'center' }}>
             <p style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 8 }}>
-              OAuth 暂时不可用？使用应用专用密码连接
+              {t('connect.oauthFallback')}
             </p>
             <button onClick={() => setStep('authcode')} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              使用应用密码 →
+              {t('connect.useAppPassword')}
             </button>
           </div>
         </div>
@@ -196,7 +184,7 @@ export default function Connect() {
         <div style={cardStyle}>
           {/* Instructions */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>如何获取授权码：</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{t('connect.howTo')}</div>
             <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#86868B', lineHeight: 2 }}>
               {steps.map((s, i) => <li key={i}>{s}</li>)}
             </ol>
@@ -206,21 +194,21 @@ export default function Connect() {
                 background: 'rgba(0,122,255,.06)', color: '#007AFF', fontSize: 12, fontWeight: 600,
                 textDecoration: 'none',
               }}>
-                打开 {p.name} 设置页面 →
+                {t('connect.openSettings').replace('{provider}', p.name)}
               </a>
             )}
           </div>
 
           {/* Auth code input */}
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>粘贴授权码</label>
+            <label style={labelStyle}>{t('connect.pasteCode')}</label>
             <input type="text" value={credential}
               onChange={e => setCredential(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && credential.length >= 6 && doConnect(credential)}
-              placeholder="例如：ABCDEFGHIJKLMNOP" style={inputStyle} autoFocus
+              placeholder={t('connect.codePlaceholder')} style={inputStyle} autoFocus
             />
             <div style={{ fontSize: 11, color: '#AEAEB2', marginTop: 4 }}>
-              授权码通常为 16 位英文字母，获取后粘贴到上方输入框
+              {t('connect.codeHint')}
             </div>
           </div>
 
@@ -229,7 +217,7 @@ export default function Connect() {
           <button onClick={() => doConnect(credential)}
             disabled={credential.length < 6 || loading}
             style={btnStyle(credential.length >= 6 && !loading)}>
-            {loading ? '⏳ 连接中…' : '连接邮箱'}
+            {loading ? t('connect.connecting') : t('connect.connect')}
           </button>
         </div>
       </div>
@@ -249,24 +237,24 @@ export default function Connect() {
               {isCustom ? '🔧' : providerEmoji(detected.provider?.key)}
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{isCustom ? '自定义邮箱' : detected.provider?.name}</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{isCustom ? t('connect.customTitle') : detected.provider?.name}</div>
               <div style={{ fontSize: 12, color: '#86868B' }}>{email}</div>
             </div>
           </div>
 
           {isCustom && (
             <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: 'rgba(0,122,255,.04)', fontSize: 12, color: '#86868B', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>手动配置</div>
-              IMAP: {detected.imapHost || '(未识别)'}:{detected.imapPort} · SMTP: {detected.smtpHost || '(未识别)'}:{detected.smtpPort}
+              <div style={{ fontWeight: 600, color: '#1D1D1F', marginBottom: 4 }}>{t('connect.customConfig')}</div>
+              {t('connect.imapSmtp').replace('{host}', detected.imapHost || '(unknown)').replace('{port}', String(detected.imapPort)).replace('{host2}', detected.smtpHost || '(unknown)').replace('{port2}', String(detected.smtpPort))}
             </div>
           )}
 
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>{isCustom ? '邮箱密码' : `输入 ${detected.provider?.name || '邮箱'} 密码`}</label>
+            <label style={labelStyle}>{isCustom ? t('connect.passwordCustom') : t('connect.passwordLabel').replace('{provider}', detected.provider?.name || 'Email')}</label>
             <input type="password" value={credential}
               onChange={e => setCredential(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && credential && doConnect(credential)}
-              placeholder={isCustom ? '邮箱登录密码' : '和登录网页版邮箱用的密码一样'}
+              placeholder={t('connect.passwordPlaceholder')}
               style={inputStyle} autoFocus
             />
           </div>
@@ -275,14 +263,14 @@ export default function Connect() {
 
           <button onClick={() => doConnect(credential)} disabled={!credential || loading}
             style={btnStyle(!!credential && !loading)}>
-            {loading ? '⏳ 连接中…' : '连接邮箱'}
+            {loading ? t('connect.connecting') : t('connect.connect')}
           </button>
 
           {error && (
             <div style={{ marginTop: 12, textAlign: 'center' }}>
               <button onClick={() => setStep('authcode')}
                 style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 12, cursor: 'pointer' }}>
-                密码不对？试试授权码 →
+                {t('connect.wrongPassword')}
               </button>
             </div>
           )}
@@ -297,22 +285,22 @@ export default function Connect() {
     return (
       <div style={{ maxWidth: 420, margin: '0 auto', padding: '0 16px', textAlign: 'center' }}>
         <div style={{ fontSize: 56, marginBottom: 12 }}>✅</div>
-        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>邮箱已连接</h2>
-        <p style={{ fontSize: 14, color: '#86868B', margin: '0 0 24px' }}>
-          {connectedEmail}<br/>AI 正在监控收件箱，每 60 秒检查一次新邮件
+        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>{t('connect.done.title')}</h2>
+        <p style={{ fontSize: 14, color: '#86868B', margin: '0 0 24px', whiteSpace: 'pre-line' }}>
+          {t('connect.done.desc').replace('{email}', connectedEmail)}
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
           <a href="/" style={{ padding: '10px 24px', borderRadius: 12, background: '#007AFF', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-            返回面板
+            {t('connect.done.dashboard')}
           </a>
           <button onClick={handleDisconnect} style={{ padding: '10px 24px', borderRadius: 12, border: '.5px solid rgba(0,0,0,.1)', background: '#fff', color: '#FF3B30', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            断开
+            {t('connect.disconnect')}
           </button>
         </div>
 
         {/* Other integrations */}
         <div style={{ marginTop: 40, textAlign: 'left' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#86868B', marginBottom: 12, letterSpacing: '.5px', textTransform: 'uppercase' }}>其他集成</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#86868B', marginBottom: 12, letterSpacing: '.5px', textTransform: 'uppercase' }}>{t('connect.otherIntegrations')}</div>
           {otherIntegrations.map(item => (
             <div key={item.key} style={{
               background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 8,
@@ -331,7 +319,7 @@ export default function Connect() {
                 background: status[item.key]?.configured ? 'rgba(52,199,89,.08)' : 'rgba(0,122,255,.06)',
                 color: status[item.key]?.configured ? '#34C759' : '#007AFF',
               }}>
-                {status[item.key]?.configured ? '已连接' : '未连接'}
+                {status[item.key]?.configured ? t('settings.tools.connected') : t('settings.tools.notConnected')}
               </span>
             </div>
           ))}
@@ -348,7 +336,7 @@ export default function Connect() {
 function BackBtn({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 16 }}>
-      ← 返回
+      {t('shared.back')}
     </button>
   );
 }
@@ -381,8 +369,8 @@ function ConnectedBanner({ email, onDisconnect }: { email: string; onDisconnect:
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span>✅</span><span style={{ fontSize: 14, fontWeight: 600 }}>{email}</span>
       </div>
-      <p style={{ fontSize: 12, color: '#86868B', margin: 0 }}>已连接 · AI 正在监控收件箱</p>
-      <button onClick={onDisconnect} style={{ marginTop: 8, background: 'none', border: 'none', color: '#FF3B30', fontSize: 12, cursor: 'pointer', padding: 0 }}>断开连接</button>
+      <p style={{ fontSize: 12, color: '#86868B', margin: 0 }}>{t('connect.connected')}</p>
+      <button onClick={onDisconnect} style={{ marginTop: 8, background: 'none', border: 'none', color: '#FF3B30', fontSize: 12, cursor: 'pointer', padding: 0 }}>{t('connect.disconnect')}</button>
     </div>
   );
 }

@@ -57,10 +57,26 @@ export function getDb(): Database.Database {
 
 export function isDbReady(): boolean { return _db !== null; }
 
-// Backup before each write (lightweight: just copy the WAL-backed file)
+// Backup with daily rotation (keeps latest + 7 daily snapshots)
+const MAX_BACKUPS = 7;
 export function backupDb() {
   if (!_db) return;
-  try { fs.copyFileSync(DB_PATH, DB_BAK_PATH); } catch {}
+  try {
+    fs.copyFileSync(DB_PATH, DB_BAK_PATH);
+    // Daily dated backup
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const datedPath = path.join(process.cwd(), 'data', `studiosage-${dateStr}.db.bak`);
+    if (!fs.existsSync(datedPath)) {
+      fs.copyFileSync(DB_PATH, datedPath);
+      // Cleanup old backups
+      const files = fs.readdirSync(path.join(process.cwd(), 'data'))
+        .filter(f => f.startsWith('studiosage-') && f.endsWith('.db.bak'))
+        .sort();
+      while (files.length > MAX_BACKUPS) {
+        try { fs.unlinkSync(path.join(process.cwd(), 'data', files.shift()!)); } catch {}
+      }
+    }
+  } catch {}
 }
 
 export function closeDb() {
@@ -72,7 +88,12 @@ export function closeDb() {
 // ── Migrations ──
 
 function runMigrations(db: Database.Database) {
-  db.exec(`
+  // Schema version tracking (v1 = initial, incremented per migration)
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT DEFAULT (datetime('now')))`);
+  const currentVersion = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any)?.v || 0;
+
+  if (currentVersion < 1) {
+    db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, google_id TEXT UNIQUE,
       plan TEXT DEFAULT 'trial', password_hash TEXT,
@@ -155,8 +176,10 @@ function runMigrations(db: Database.Database) {
       status TEXT DEFAULT 'pending',
       photographer_note TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
-    );
+      );
   `);
+    db.exec(`INSERT OR IGNORE INTO schema_version (version) VALUES (1)`);
+  }
 
   // Add columns that may be missing on older DBs
   const addCol = (table: string, col: string, type: string) => {
@@ -176,9 +199,13 @@ function runMigrations(db: Database.Database) {
   addCol('users', 'stripe_subscription_id', 'TEXT');
   addCol('delivery_rounds', 'share_token', 'TEXT');
   addCol('clients', 'conversation_memory', "TEXT DEFAULT '{}'");
+  addCol('users', 'reset_token', 'TEXT');
+  addCol('users', 'reset_token_expires', 'TEXT');
 
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_user_tool ON tool_connections(user_id, tool_id)'); } catch {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_messages_imap_uid ON messages(user_id, imap_uid)'); } catch {}
+  // Unique constraint: one client per email per photographer (skip empty emails)
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_user_email ON clients(user_id, email) WHERE email != ''"); } catch {}
 
   // Project indexes
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)'); } catch {}
@@ -193,6 +220,33 @@ function runMigrations(db: Database.Database) {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_revision_requests_round ON revision_requests(round_id)'); } catch {}
   // Delivery round share token index
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_share_token ON delivery_rounds(share_token)'); } catch {}
+
+  // Token blacklist (session invalidation on logout)
+  try { db.exec(`CREATE TABLE IF NOT EXISTS token_blacklist (
+    token_fingerprint TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`); } catch {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at)'); } catch {}
+
+  // Cleanup expired entries
+  try { db.exec("DELETE FROM token_blacklist WHERE expires_at < datetime('now')"); } catch {}
+
+  // Project templates
+  try { db.exec(`CREATE TABLE IF NOT EXISTS project_templates (
+    id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id),
+    name TEXT NOT NULL, shoot_type TEXT DEFAULT 'wedding',
+    package_type TEXT DEFAULT 'Standard',
+    max_retouch_count INTEGER DEFAULT 30,
+    max_revision_rounds INTEGER DEFAULT 2,
+    metadata TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+  )`); } catch {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_project_templates_user ON project_templates(user_id)'); } catch {}
+
+  // Invoice sequential number tracking
+  addCol('invoices', 'invoice_number', 'TEXT');
 
   backupDb();
 }

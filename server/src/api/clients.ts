@@ -2,6 +2,7 @@ import { Router, type Router as RouterType } from 'express';
 import { v4 as uuid } from 'uuid';
 import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
+import { validate, createClientSchema, updateClientSchema } from '../middleware/validate.js';
 
 const router: RouterType = Router();
 const uuidv4 = () => uuid();
@@ -70,11 +71,10 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create client manually
-router.post('/', async (req, res) => {
+router.post('/', validate(createClientSchema), async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const { name, email, phone, wechat_id, type, notes } = req.body;
-  if (!name) return res.status(400).json({ ok: false, error: 'Client name is required' });
 
   const id = uuidv4();
   run(

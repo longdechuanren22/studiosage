@@ -16,14 +16,16 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcryptjs.compare(password, hash);
 }
 
-/** Get the encryption key (32 bytes for AES-256) */
+/** Get the encryption key (32 bytes for AES-256). Requires ENCRYPTION_KEY env var. */
 function getEncryptionKey(): Buffer {
   const envKey = process.env.ENCRYPTION_KEY;
-  if (envKey && envKey.length >= 32) {
-    return Buffer.from(envKey.slice(0, 32), 'utf-8');
+  if (!envKey || envKey.length < 32) {
+    throw new Error(
+      'ENCRYPTION_KEY environment variable must be set and at least 32 characters long. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
   }
-  const secret = envKey || 'studiosage-fallback-encryption-key-2026';
-  return crypto.createHash('sha256').update(secret).digest();
+  return Buffer.from(envKey.slice(0, 32), 'utf-8');
 }
 
 // Helper: work around Node v24 Buffer/Uint8Array type incompatibility

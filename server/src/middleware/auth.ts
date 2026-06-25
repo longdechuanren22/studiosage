@@ -14,13 +14,30 @@ export interface JwtPayload {
 }
 
 /** Sign a JWT token for a user */
-export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+export function signToken(payload: JwtPayload, expiresIn = TOKEN_EXPIRY): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn } as jwt.SignOptions);
 }
 
 /** Verify a JWT token and return the payload */
 export function verifyToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload;
+}
+
+/** Simple token fingerprint for blacklist lookup */
+export function tokenFingerprint(token: string): string {
+  // Use first 64 chars as fingerprint — sufficient for uniqueness
+  return token.slice(0, 64);
+}
+
+/** Check if token is blacklisted */
+function isBlacklisted(fingerprint: string): boolean {
+  try {
+    const { queryOne } = require('../db/query.js');
+    const row = queryOne('SELECT 1 FROM token_blacklist WHERE token_fingerprint = ? AND expires_at > datetime(?)', [fingerprint, 'now']);
+    return !!row;
+  } catch {
+    return false; // DB not ready — allow through
+  }
 }
 
 // Extend Express Request to include userId
@@ -40,8 +57,14 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     res.status(401).json({ ok: false, error: 'Authentication required', code: 'UNAUTHORIZED' });
     return;
   }
+  const token = header.slice(7);
   try {
-    const payload = verifyToken(header.slice(7));
+    const payload = verifyToken(token);
+    // Check blacklist
+    if (isBlacklisted(tokenFingerprint(token))) {
+      res.status(401).json({ ok: false, error: 'Session has been logged out. Please sign in again.', code: 'TOKEN_REVOKED' });
+      return;
+    }
     req.userId = payload.userId;
     req.userEmail = payload.email;
     next();

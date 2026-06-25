@@ -6,6 +6,7 @@ import { classifyMessage } from '../ai/engine.js';
 import { extractEntities } from '../ai/rules-engine.js';
 import { sendReply } from '../adapters/email.js';
 import { decrypt } from '../utils/crypto.js';
+import { checkAI } from '../middleware/paywall.js';
 
 const router: RouterType = Router();
 const uuidv4 = () => uuid();
@@ -36,7 +37,7 @@ router.get('/stats', async (req, res) => {
 });
 
 // Incoming message — used by email watcher AND as a public API
-router.post('/incoming', async (req, res) => {
+router.post('/incoming', checkAI, async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const { from, subject, body, clientId } = req.body;

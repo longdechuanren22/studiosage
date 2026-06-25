@@ -3,6 +3,56 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
 import { t, useI18n } from '../i18n';
 
+// Tiny MD5 hash for Gravatar URLs (Gravatar requires MD5(email))
+function md5(str: string): string {
+  // MD5 round functions
+  function F(x: number, y: number, z: number) { return (x & y) | (~x & z); }
+  function G(x: number, y: number, z: number) { return (x & z) | (y & ~z); }
+  function H(x: number, y: number, z: number) { return x ^ y ^ z; }
+  function I(x: number, y: number, z: number) { return y ^ (x | ~z); }
+  function rotl(n: number, s: number) { return (n << s) | (n >>> (32 - s)); }
+  // Convert string to UTF-8 bytes
+  const bytes: number[] = [];
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (c < 128) bytes.push(c);
+    else if (c < 2048) bytes.push(192 | (c >> 6), 128 | (c & 63));
+    else bytes.push(224 | (c >> 12), 128 | ((c >> 6) & 63), 128 | (c & 63));
+  }
+  const len = bytes.length;
+  bytes.push(128);
+  while ((bytes.length % 64) !== 56) bytes.push(0);
+  // Append length in bits as 64-bit little-endian
+  const bitLen = len * 8;
+  for (let i = 0; i < 4; i++) bytes.push((bitLen >>> (i * 8)) & 255);
+  for (let i = 0; i < 4; i++) bytes.push(((bitLen / 4294967296) >>> (i * 8)) & 255);
+
+  const T: number[] = [];
+  for (let i = 0; i < 64; i++) T[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296);
+
+  let a = 1732584193, b = 4023233417, c = 2562383102, d = 271733878;
+  for (let bi = 0; bi < bytes.length; bi += 64) {
+    const X: number[] = [];
+    for (let i = 0; i < 16; i++) {
+      X[i] = bytes[bi + i * 4] | (bytes[bi + i * 4 + 1] << 8) | (bytes[bi + i * 4 + 2] << 16) | (bytes[bi + i * 4 + 3] << 24);
+    }
+    let A = a, B = b, C = c, D = d;
+    for (let i = 0; i < 64; i++) {
+      let fVal: number, g: number;
+      if (i < 16) { fVal = F(B, C, D); g = i; }
+      else if (i < 32) { fVal = G(B, C, D); g = (5 * i + 1) % 16; }
+      else if (i < 48) { fVal = H(B, C, D); g = (3 * i + 5) % 16; }
+      else { fVal = I(B, C, D); g = (7 * i) % 16; }
+      fVal = (fVal + A + T[i] + X[g]) | 0;
+      const S = [7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21][i % 4 * 4 + Math.floor(i / 16)];
+      A = D; D = C; C = B; B = (B + rotl(fVal, S)) | 0;
+    }
+    a = (a + A) | 0; b = (b + B) | 0; c = (c + C) | 0; d = (d + D) | 0;
+  }
+  const hex = (n: number) => { const s = '0000000' + ((n >>> 0).toString(16)); return s.slice(-8); };
+  return hex(a) + hex(b) + hex(c) + hex(d);
+}
+
 export const DemoContext = createContext<{ demo: boolean; toggleDemo: () => void }>({ demo: true, toggleDemo: () => {} });
 export const useDemo = () => useContext(DemoContext);
 
@@ -12,12 +62,13 @@ const navItems: NavItem[] = [
   { to: '/', icon: '◧', labelKey: 'nav.dashboard' },
   { to: '/clients', icon: '👥', labelKey: 'nav.clients' },
   { to: '/projects', icon: '🎬', labelKey: 'nav.projects' },
+  { to: '/invoices', icon: '📄', labelKey: 'nav.invoices' },
   { to: '/connect', icon: '📬', labelKey: 'nav.connect' },
   { to: '/settings', icon: '⚙', labelKey: 'nav.settings' },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const [demo, setDemo] = useState(true);
+  const [demo, setDemo] = useState(() => localStorage.getItem('studiosage_demo') === '1');
   const [menuOpen, setMenuOpen] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem('studiosage_dark') === '1');
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -27,11 +78,20 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { lang, setLang } = useI18n();
   const avatarChar = user?.name?.[0] || 'E';
   const avatarUrl = user?.email
-    ? `https://www.gravatar.com/avatar/${btoa(user.email.trim().toLowerCase()).slice(0, 32)}?d=404&s=60`
+    ? `https://www.gravatar.com/avatar/${md5(user.email.trim().toLowerCase())}?d=404&s=60`
     : null;
   const [avatarFailed, setAvatarFailed] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('studiosage_token');
+      if (token) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+      }
+    } catch {}
     logout();
     navigate('/login', { replace: true });
   };
@@ -51,7 +111,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <DemoContext.Provider value={{ demo, toggleDemo: () => setDemo(!demo) }}>
+    <DemoContext.Provider value={{ demo, toggleDemo: () => setDemo(prev => { const next = !prev; localStorage.setItem('studiosage_demo', next ? '1' : '0'); return next; }) }}>
       <div className="min-h-screen" style={{ background: 'linear-gradient(160deg, #e8e6f0 0%, #f0eff5 20%, #f5f5f7 50%, #f0eef4 80%, #e4e2ec 100%)' }}>
         <header className="glass sticky top-0 z-50 border-b" style={{ borderColor: 'rgba(0,0,0,.06)' }}>
           <div className="max-w-4xl mx-auto px-5 py-4 flex items-center justify-between">

@@ -3,6 +3,11 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 
+/** TLS options: strict in production, permissive in dev for self-signed certs */
+function createTlsOptions(): { rejectUnauthorized: boolean } {
+  return { rejectUnauthorized: process.env.NODE_ENV !== 'production' };
+}
+
 export interface EmailConfig {
   email: string;
   password: string; // app-specific password / authorization code
@@ -78,7 +83,7 @@ export async function testConnection(cfg: EmailConfig): Promise<{ ok: boolean; e
       const imap = new Imap({
         user: cfg.email, password: cfg.password,
         host: cfg.imapHost, port: cfg.imapPort, tls: cfg.imapTls,
-        tlsOptions: { rejectUnauthorized: false },
+        tlsOptions: createTlsOptions(),
         connTimeout: 10000, authTimeout: 10000,
       });
       const timer = setTimeout(() => { imap.destroy(); reject(new Error('IMAP 连接超时')); }, 12000);
@@ -106,7 +111,7 @@ export async function testConnection(cfg: EmailConfig): Promise<{ ok: boolean; e
       host: cfg.smtpHost, port: cfg.smtpPort, secure: cfg.smtpTls,
       auth: { user: cfg.email, pass: cfg.password },
       connectionTimeout: 10000,
-      tls: { rejectUnauthorized: false },
+      tls: createTlsOptions(),
     });
     await transporter.verify();
   } catch (err: any) {
@@ -140,7 +145,7 @@ export async function fetchRecentMessages(cfg: EmailConfig, limit = 10): Promise
     const imap = new Imap({
       user: cfg.email, password: cfg.password,
       host: cfg.imapHost, port: cfg.imapPort, tls: cfg.imapTls,
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: createTlsOptions(),
       connTimeout: 15000, authTimeout: 15000,
     });
 
@@ -208,7 +213,7 @@ export function startIdleWatcher(cfg: EmailConfig, onMessage: OnNewMessage): voi
     const imap = new Imap({
       user: cfg.email, password: cfg.password,
       host: cfg.imapHost, port: cfg.imapPort, tls: cfg.imapTls,
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: createTlsOptions(),
       connTimeout: 30000, authTimeout: 30000,
       keepalive: { interval: 10000, idleInterval: 300000, forceNoop: true },
     });
@@ -312,12 +317,31 @@ export function startIdleWatcher(cfg: EmailConfig, onMessage: OnNewMessage): voi
   connect();
 }
 
+// ── SMTP Rate Limiter (token bucket: 30 emails/minute) ──
+const smtpSendCounts = new Map<string, { count: number; resetAt: number }>();
+const SMTP_RATE_LIMIT = 30;
+const SMTP_RATE_WINDOW = 60_000; // 1 minute
+
+function checkSmtpRateLimit(email: string): void {
+  const now = Date.now();
+  let entry = smtpSendCounts.get(email);
+  if (!entry || now > entry.resetAt) {
+    smtpSendCounts.set(email, { count: 1, resetAt: now + SMTP_RATE_WINDOW });
+    return;
+  }
+  entry.count++;
+  if (entry.count > SMTP_RATE_LIMIT) {
+    throw new Error(`SMTP rate limit exceeded for ${email} (${SMTP_RATE_LIMIT}/min)`);
+  }
+}
+
 /** Send a reply */
 export async function sendReply(cfg: EmailConfig, to: string, subject: string, body: string, inReplyTo?: string): Promise<void> {
+  checkSmtpRateLimit(cfg.email);
   const transporter = nodemailer.createTransport({
     host: cfg.smtpHost, port: cfg.smtpPort, secure: cfg.smtpTls,
     auth: { user: cfg.email, pass: cfg.password },
-    tls: { rejectUnauthorized: false },
+    tls: createTlsOptions(),
   });
   await transporter.sendMail({
     from: cfg.email,

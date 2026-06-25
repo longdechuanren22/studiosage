@@ -9,8 +9,16 @@ const USE_AI = !!(DEEPSEEK_KEY || ANTHROPIC_KEY);
 // Track which model is active
 let activeModel: 'claude' | 'deepseek' | 'offline' = 'offline';
 let consecutiveFailures = 0;
+let lastFailureAt = 0;
+const AI_RECOVERY_COOLDOWN_MS = 300_000; // 5 minutes
 
 export function getAIStatus() {
+  // Auto-recover: if enough time has passed since last failure, try AI again
+  if (consecutiveFailures >= 3 && lastFailureAt > 0 && Date.now() - lastFailureAt > AI_RECOVERY_COOLDOWN_MS) {
+    consecutiveFailures = 0;
+    lastFailureAt = 0;
+    activeModel = 'offline';
+  }
   return {
     active: USE_AI,
     model: activeModel,
@@ -56,12 +64,13 @@ export async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promi
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: maxTokens, temperature: temp, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001', max_tokens: maxTokens, temperature: temp, messages: [{ role: 'user', content: prompt }] }),
       });
       if (res.ok) {
         const data = await res.json() as any;
         activeModel = 'claude';
         consecutiveFailures = 0;
+        lastFailureAt = 0;
         return data.content[0].text;
       }
       console.error(`[AI] Claude returned ${res.status}, trying DeepSeek...`);
@@ -76,12 +85,13 @@ export async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promi
       const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_KEY}` },
-        body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature: temp }),
+        body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature: temp }),
       });
       if (res.ok) {
         const data = await res.json() as any;
         activeModel = 'deepseek';
         consecutiveFailures = 0;
+        lastFailureAt = 0;
         return data.choices[0].message.content;
       }
       console.error(`[AI] DeepSeek returned ${res.status}`);
@@ -91,6 +101,7 @@ export async function callAI(prompt: string, maxTokens = 600, temp = 0.3): Promi
   }
 
   consecutiveFailures++;
+  lastFailureAt = Date.now();
   activeModel = 'offline';
   throw new Error('All AI providers unavailable');
 }
@@ -472,7 +483,7 @@ export function isBusinessEmail(subject: string, body: string, fromAddress: stri
   }
 
   // 🔄 修复：不再要求摄影关键词。来自个人邮箱的邮件一律视为潜在客户。
-  const isPersonalSender = /@(gmail|outlook|yahoo|hotmail|qq|163|126|icloud|proton|protonmail|mail\.com|zoho|fastmail)/i.test(fromAddress);
+  const isPersonalSender = /@(gmail\.com|outlook\.com|yahoo\.com|hotmail\.com|qq\.com|163\.com|126\.com|icloud\.com|proton\.me|protonmail\.com|mail\.com|zoho\.com|fastmail\.com)$/i.test(fromAddress);
   if (isPersonalSender) {
     return { isBusiness: true };
   }
@@ -543,7 +554,12 @@ export function extractEnhancedEntities(subject: string, body: string): Enhanced
     [/多套.*衣服|换.*套|(\d+).*套.*衣服|(\d+).*outfits/i, '$1 outfits'],
   ];
   for (const [p, label] of clothingPatterns) {
-    if (p.test(text)) { entities.push({ type: 'clothing', value: label, confidence: 0.8 }); break; }
+    const m = text.match(p);
+    if (m) {
+      const value = label.replace(/\$(\d+)/g, (_, i) => m[parseInt(i)] || '');
+      entities.push({ type: 'clothing', value, confidence: 0.8 });
+      break;
+    }
   }
 
   // ── 化妆造型 (Makeup) ──

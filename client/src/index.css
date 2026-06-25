@@ -78,6 +78,56 @@ body {
 @media (max-width: 640px) {
   .max-w-4xl { max-width: 100% !important; padding-left: 12px; padding-right: 12px; }
   main.pb-20 { padding-bottom: 80px; }
+
+  /* Dashboard stat grid — 4 cols → 2 cols */
+  [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Analytics grid — 3 cols → 1 col */
+  [style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Plan cards — single column */
+  [style*="grid-template-columns: repeat(auto-fit"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Bottom tab bar — smaller icons, less padding */
+  .flex.justify-around.max-w-4xl button,
+  nav.fixed nav a {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+
+  /* Make buttons bigger touch targets */
+  button {
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Client detail stats — wrap on small screens */
+  [style*="display: flex; gap: 16"]:has(+ div) {
+    flex-wrap: wrap;
+  }
+}
+
+/* Safe area for notched phones */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Portal dark mode */
+@media (prefers-color-scheme: dark) {
+  body.portal-page {
+    --bg-primary: #1C1C1E;
+    --bg-card: #2C2C2E;
+    --text-primary: #F5F5F7;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
 }
 
 /* Dark mode */

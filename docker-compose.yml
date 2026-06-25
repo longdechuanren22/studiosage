@@ -7,6 +7,10 @@ services:
     environment:
       - PORT=3001
       - NODE_ENV=production
+      # Security (REQUIRED — will fail startup if unset)
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set (min 32 chars, generate with: openssl rand -hex 32)}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set (generate with: openssl rand -hex 32)}
+      - CLIENT_JWT_SECRET=${CLIENT_JWT_SECRET:?CLIENT_JWT_SECRET must be set (generate with: openssl rand -hex 32)}
       # AI
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -14,7 +18,12 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO:-}
-      - STRIPE_PRICE_STUDIO=${STRIPE_PRICE_STUDIO:-}
+      - STRIPE_PRICE_PRO_ANNUAL=${STRIPE_PRICE_PRO_ANNUAL:-}
+      - STRIPE_PRICE_STARTER=${STRIPE_PRICE_STARTER:-}
+      # Monitoring (optional — set SENTRY_DSN to enable)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-plain}
       # R2 Storage (optional — falls back to local if not set)
       - R2_ENDPOINT=${R2_ENDPOINT:-}
       - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
@@ -23,16 +32,22 @@ services:
       - R2_PUBLIC_URL=${R2_PUBLIC_URL:-}
       # App
       - APP_URL=${APP_URL:-https://hzlmagent.com}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - CLIENT_JWT_SECRET=${CLIENT_JWT_SECRET:-change-me-too}
       - CORS_ORIGIN=${CORS_ORIGIN:-https://hzlmagent.com}
       # Optional integrations
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - PIXIESET_API_KEY=${PIXIESET_API_KEY:-}
     volumes:
-      - studiosage_data:/app/data
+      - studiosage_data:/app/server/data
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
 volumes:
   studiosage_data:

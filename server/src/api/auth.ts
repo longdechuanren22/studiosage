@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { initDb } from '../db/schema.js';
 import { queryOne, run } from '../db/query.js';
 import { hashPassword, verifyPassword } from '../utils/crypto.js';
-import { signToken, authenticate } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
+import { signToken, tokenFingerprint, authenticate } from '../middleware/auth.js';
+import { validate, forgotPasswordSchema, resetPasswordSchema } from '../middleware/validate.js';
 import { z } from 'zod';
 
 const router: RouterType = Router();
@@ -108,7 +108,7 @@ router.get('/me', authenticate, async (req, res, next) => {
 });
 
 // POST /api/auth/forgot-password — send reset link
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res) => {
   await initDb();
   const { email } = req.body;
   if (!email) return res.status(400).json({ ok: false, error: 'Email is required' });
@@ -117,23 +117,24 @@ router.post('/forgot-password', async (req, res) => {
   if (!user) return res.json({ ok: true, message: 'If the email exists, a reset link has been sent.' });
 
   const token = randomUUID();
-  run('UPDATE users SET password_hash = ? WHERE id = ?', [token, (user as any).id]);
+  const expires = new Date(Date.now() + 3600000).toISOString(); // 1 hour expiry
+  run('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [token, expires, (user as any).id]);
   // In production: send email with link. For now: return token directly (dev mode).
   res.json({ ok: true, message: 'Reset token generated', token: process.env.NODE_ENV === 'production' ? undefined : token });
 });
 
 // POST /api/auth/reset-password — reset with token
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', validate(resetPasswordSchema), async (req, res) => {
   await initDb();
   const { token, newPassword } = req.body;
   if (!token || !newPassword) return res.status(400).json({ ok: false, error: 'Token and new password are required' });
   if (newPassword.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
 
-  const user = queryOne('SELECT id FROM users WHERE password_hash = ?', [token]) as any;
+  const user = queryOne("SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > datetime('now')", [token]) as any;
   if (!user) return res.status(400).json({ ok: false, error: 'Invalid or expired reset token' });
 
   const passwordHash = await hashPassword(newPassword);
-  run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, user.id]);
+  run('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [passwordHash, user.id]);
   res.json({ ok: true, message: 'Password has been reset. You can now login.' });
 });
 
@@ -167,6 +168,31 @@ router.post('/change-password', authenticate, async (req, res) => {
   const hash = await hashPassword(newPassword);
   run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, userId]);
   res.json({ ok: true });
+});
+
+// POST /api/auth/logout — invalidate current session
+router.post('/logout', authenticate, async (req, res) => {
+  await initDb();
+  const header = req.headers.authorization!;
+  const token = header.slice(7);
+  const payload = (await import('../middleware/auth.js')).verifyToken(token);
+  const fp = tokenFingerprint(token);
+  const expiresAt = new Date((payload as any).exp * 1000).toISOString();
+  run('INSERT OR IGNORE INTO token_blacklist (token_fingerprint, user_id, expires_at) VALUES (?, ?, ?)',
+    [fp, req.userId!, expiresAt]);
+  // Cleanup old entries
+  run("DELETE FROM token_blacklist WHERE expires_at < datetime('now')");
+  res.json({ ok: true });
+});
+
+// POST /api/auth/refresh — get a new token before expiry
+router.post('/refresh', authenticate, async (req, res) => {
+  try {
+    const newToken = signToken({ userId: req.userId!, email: req.userEmail! });
+    res.json({ token: newToken });
+  } catch (err) {
+    res.status(500).json({ error: 'Token refresh failed' });
+  }
 });
 
 export { router as authRoutes };

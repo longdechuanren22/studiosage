@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../utils/api';
+import { t } from '../i18n';
 
 interface GalleryPhoto { id: string; filename: string; originalName: string; url: string; thumbnailUrl: string; order: number; }
 interface SelectionData {
@@ -32,7 +33,7 @@ export default function PortalSelection() {
         setRejectedIds(result.rejectedIds || []);
         setFavoriteIds(result.favoriteIds || []);
       } catch (e: any) {
-        setError(e.message || '选片链接不存在或已失效');
+        setError(e.message || t('portalSelection.linkExpired'));
       } finally { setLoading(false); }
     })();
   }, [shareToken]);
@@ -40,31 +41,27 @@ export default function PortalSelection() {
   const togglePhoto = useCallback((photoId: string, action: 'select' | 'reject' | 'favorite') => {
     if (data?.selectionStatus === 'selection_done') return;
 
-    // Toggle: if already in target state, remove it (clear selection); else move to target
     if (action === 'select') {
       setSelectedIds(prev => {
         if (prev.includes(photoId)) return prev.filter(id => id !== photoId);
         if (prev.length >= (data?.maxRetouch || Infinity)) return prev;
         return [...prev, photoId];
       });
-      // Clear from rejected/favorite when selecting
       setRejectedIds(prev => prev.filter(id => id !== photoId));
       setFavoriteIds(prev => prev.filter(id => id !== photoId));
     } else if (action === 'reject') {
       setRejectedIds(prev => prev.includes(photoId) ? prev.filter(id => id !== photoId) : [...prev, photoId]);
-      // Clear from selected/favorite when rejecting
       setSelectedIds(prev => prev.filter(id => id !== photoId));
       setFavoriteIds(prev => prev.filter(id => id !== photoId));
     } else if (action === 'favorite') {
       setFavoriteIds(prev => prev.includes(photoId) ? prev.filter(id => id !== photoId) : [...prev, photoId]);
-      // Clear from rejected when favoriting (keep selected if also selected)
       setRejectedIds(prev => prev.filter(id => id !== photoId));
     }
   }, [data?.maxRetouch, data?.selectionStatus]);
 
   const handleSubmit = async () => {
-    if (selectedIds.length === 0) { setError('请至少选择一张照片进行精修'); return; }
-    if (!confirm(`确认提交？您选择了 ${selectedIds.length} 张精修照片。提交后不可修改。`)) return;
+    if (selectedIds.length === 0) { setError(t('portalSelection.selectAtLeastOne')); return; }
+    if (!confirm(t('portalSelection.confirmSubmit').replace('{count}', String(selectedIds.length)))) return;
     setSubmitting(true);
     try {
       await api.post(`/api/portal/selection/${shareToken}`, {
@@ -100,27 +97,31 @@ export default function PortalSelection() {
         <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>{data.projectTitle}</h2>
         <p style={{ fontSize: 14, color: '#86868B', margin: 0 }}>
           {data.clientName && `👤 ${data.clientName}`}
-          {countdown !== null && ` · ⏰ 剩余 ${countdown} 天`}
+          {countdown !== null && ` · ⏰ ${t('portalSelection.daysLeft').replace('{days}', String(countdown))}`}
         </p>
       </div>
 
       {/* Selection progress */}
       <div style={{ background: '#fff', borderRadius: 14, padding: 16, marginBottom: 16, border: '1px solid #F0F0F2' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>已选 {selectedIds.length}/{data.maxRetouch} 张</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>
+            {t('portalSelection.selectedCount').replace('{count}', String(selectedIds.length))} / {data.maxRetouch}
+          </span>
           <span style={{ fontSize: 12, color: selectedIds.length >= data.maxRetouch ? '#FF9500' : '#34C759' }}>
-            {selectedIds.length >= data.maxRetouch ? '已到达上限' : `还可选 ${data.maxRetouch - selectedIds.length} 张`}
+            {selectedIds.length >= data.maxRetouch
+              ? t('portalSelection.maxSelectReached')
+              : t('portalSelection.canSelectMore').replace('{count}', String(data.maxRetouch - selectedIds.length))}
           </span>
         </div>
         <div style={{ height: 6, borderRadius: 3, background: '#E5E5EA', overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${Math.min(100, (selectedIds.length / data.maxRetouch) * 100)}%`, borderRadius: 3, background: selectedIds.length >= data.maxRetouch ? '#FF9500' : '#007AFF', transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 13, color: '#86868B' }}>
-          <span>✅ {selectedIds.length} 精修</span>
-          <span>❌ {rejectedIds.length} 跳过</span>
-          <span>⭐ {favoriteIds.length} 喜欢</span>
+          <span>✅ {selectedIds.length} {t('portalSelection.retouchCount')}</span>
+          <span>❌ {rejectedIds.length} {t('portalSelection.skipCount')}</span>
+          <span>⭐ {favoriteIds.length} {t('portalSelection.likeCount')}</span>
         </div>
-        {isDone && <div style={{ marginTop: 12, padding: 10, background: '#F0FFF0', borderRadius: 8, fontSize: 14, color: '#34C759', textAlign: 'center', fontWeight: 600 }}>✅ 选片已提交，摄影师将开始精修</div>}
+        {isDone && <div style={{ marginTop: 12, padding: 10, background: '#F0FFF0', borderRadius: 8, fontSize: 14, color: '#34C759', textAlign: 'center', fontWeight: 600 }}>✅ {t('portalSelection.selectionSubmitted')}</div>}
       </div>
 
       {error && <div style={{ padding: 10, background: '#FFF0F0', borderRadius: 8, color: '#FF3B30', fontSize: 13, marginBottom: 12 }}>{error}</div>}
@@ -128,20 +129,24 @@ export default function PortalSelection() {
       {/* Overdue warning */}
       {data.isOverdue && !isDone && (
         <div style={{ padding: 12, background: '#FFF0F0', borderRadius: 10, border: '1px solid #FF3B30', marginBottom: 12, fontSize: 14, color: '#FF3B30', textAlign: 'center', fontWeight: 600 }}>
-          ⏰ {data.overdueWarning || `选片已逾期${data.daysOverdue}天`}
+          ⏰ {data.overdueWarning || t('portalSelection.deadlinePassed').replace('{days}', String(data.daysOverdue || 0))}
         </div>
       )}
 
       {/* View mode toggle */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={() => setViewMode('grid')} style={{ ...tabBtn, background: viewMode === 'grid' ? '#007AFF' : '#F0F0F2', color: viewMode === 'grid' ? '#fff' : '#1D1D1F' }}>▦ 网格</button>
-          <button onClick={() => setViewMode('single')} style={{ ...tabBtn, background: viewMode === 'single' ? '#007AFF' : '#F0F0F2', color: viewMode === 'single' ? '#fff' : '#1D1D1F' }}>◉ 单张</button>
+          <button onClick={() => setViewMode('grid')} style={{ ...tabBtn, background: viewMode === 'grid' ? '#007AFF' : '#F0F0F2', color: viewMode === 'grid' ? '#fff' : '#1D1D1F' }}>▦ {t('portalSelection.gridView')}</button>
+          <button onClick={() => setViewMode('single')} style={{ ...tabBtn, background: viewMode === 'single' ? '#007AFF' : '#F0F0F2', color: viewMode === 'single' ? '#fff' : '#1D1D1F' }}>◉ {t('portalSelection.singleView')}</button>
         </div>
         {!isDone && (
           <button onClick={handleSubmit} disabled={submitting || selectedIds.length === 0} style={{
             ...btnSubmit, opacity: submitting || selectedIds.length === 0 ? .5 : 1,
-          }}>{submitting ? '提交中…' : `提交选片 (${selectedIds.length}张)`}</button>
+          }}>
+            {submitting
+              ? t('portalSelection.submitting')
+              : `${t('portalSelection.submitSelection')} (${selectedIds.length})`}
+          </button>
         )}
       </div>
 
@@ -177,9 +182,9 @@ export default function PortalSelection() {
             style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', background: '#000' }} />
           <div style={{ padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button onClick={() => setCurrentPhotoIdx(Math.max(0, currentPhotoIdx - 1))} disabled={currentPhotoIdx === 0} style={navBtn}>← 上一张</button>
+              <button onClick={() => setCurrentPhotoIdx(Math.max(0, currentPhotoIdx - 1))} disabled={currentPhotoIdx === 0} style={navBtn}>{t('portalSelection.prevPhoto')}</button>
               <span style={{ fontSize: 13, color: '#86868B' }}>{currentPhotoIdx + 1} / {data.photos.length}</span>
-              <button onClick={() => setCurrentPhotoIdx(Math.min(data.photos.length - 1, currentPhotoIdx + 1))} disabled={currentPhotoIdx === data.photos.length - 1} style={navBtn}>下一张 →</button>
+              <button onClick={() => setCurrentPhotoIdx(Math.min(data.photos.length - 1, currentPhotoIdx + 1))} disabled={currentPhotoIdx === data.photos.length - 1} style={navBtn}>{t('portalSelection.nextPhoto')}</button>
             </div>
             {!isDone && (
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -187,19 +192,19 @@ export default function PortalSelection() {
                   style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                     background: selectedIds.includes(data.photos[currentPhotoIdx].id) ? '#007AFF' : '#F0F0F2',
                     color: selectedIds.includes(data.photos[currentPhotoIdx].id) ? '#fff' : '#1D1D1F' }}>
-                  {selectedIds.includes(data.photos[currentPhotoIdx].id) ? '✓ 已选' : '✅ 选择精修'}
+                  {selectedIds.includes(data.photos[currentPhotoIdx].id) ? t('portalSelection.alreadySelected') : `✅ ${t('portalSelection.selectForRetouch')}`}
                 </button>
                 <button onClick={() => togglePhoto(data.photos[currentPhotoIdx].id, 'favorite')}
                   style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                     background: favoriteIds.includes(data.photos[currentPhotoIdx].id) ? '#FFD60A' : '#F0F0F2',
                     color: favoriteIds.includes(data.photos[currentPhotoIdx].id) ? '#fff' : '#1D1D1F' }}>
-                  {favoriteIds.includes(data.photos[currentPhotoIdx].id) ? '⭐ 已收藏' : '☆ 喜欢'}
+                  {favoriteIds.includes(data.photos[currentPhotoIdx].id) ? t('portalSelection.alreadyFavorited') : `☆ ${t('portalSelection.likePhoto')}`}
                 </button>
                 <button onClick={() => togglePhoto(data.photos[currentPhotoIdx].id, 'reject')}
                   style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                     background: rejectedIds.includes(data.photos[currentPhotoIdx].id) ? '#FF3B30' : '#F0F0F2',
                     color: rejectedIds.includes(data.photos[currentPhotoIdx].id) ? '#fff' : '#1D1D1F' }}>
-                  {rejectedIds.includes(data.photos[currentPhotoIdx].id) ? '✕ 已跳过' : '✕ 跳过'}
+                  {rejectedIds.includes(data.photos[currentPhotoIdx].id) ? t('portalSelection.alreadySkipped') : `✕ ${t('portalSelection.skipPhoto')}`}
                 </button>
               </div>
             )}

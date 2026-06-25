@@ -9,6 +9,7 @@ import { queryAll, queryOne, run } from '../db/query.js';
 import { notifyMessage, notifyClientUpdated } from '../utils/events.js';
 
 let interval: ReturnType<typeof setInterval> | null = null;
+let deadlineInterval: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
 export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, userId?: string) {
@@ -131,16 +132,29 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
             console.warn('[EmailWatcher] AI classification failed:', (err as Error).message);
           }
 
-          // ── 更新客户对话记忆 ──
+          // ── 更新客户对话记忆（上限10次交互）──
           if (clientId) {
             const now = new Date().toISOString();
+            const prevMemory = typeof conversationMemory === 'object' && conversationMemory ? conversationMemory : {};
+            const prevSubjects = Array.isArray(prevMemory.recentSubjects) ? prevMemory.recentSubjects : [];
+            const prevTopics = Array.isArray(prevMemory.recentTopics) ? prevMemory.recentTopics : [];
+            const currentSubject = msg.subject || '';
             const memory = {
               lastInteractionAt: now,
-              messageCount: (conversationMemory?.messageCount || 0) + 1,
-              lastSubject: msg.subject || '',
+              messageCount: Math.min((prevMemory.messageCount || 0) + 1, 10),
+              recentSubjects: [currentSubject, ...prevSubjects.filter((s: string) => s !== currentSubject)].slice(0, 10),
+              recentTopics: prevTopics.slice(0, 10),
               lastSentiment: sentiment,
               lastPricingIntent: pricingIntent,
+              lastReplyAt: prevMemory.lastReplyAt,
+              pendingSince: prevMemory.pendingSince,
             };
+            // Size guard: limit JSON to ~5KB
+            const memStr = JSON.stringify(memory);
+            if (memStr.length > 5000) {
+              memory.recentSubjects = memory.recentSubjects.slice(0, 5);
+              memory.recentTopics = memory.recentTopics.slice(0, 5);
+            }
             run("UPDATE clients SET conversation_memory=?, updated_at=datetime('now') WHERE id=?",
               [JSON.stringify(memory), clientId]);
           }
@@ -225,8 +239,17 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
                 }
               }
 
-              // 限制 insights 最多 20 条
-              if (meta.insights.length > 20) meta.insights = meta.insights.slice(-20);
+              // 按 type 去重 + 上限 50 条，保留最新的
+              const seen = new Set<string>();
+              meta.insights = meta.insights
+                .sort((a: any, b: any) => new Date(b.extractedAt || 0).getTime() - new Date(a.extractedAt || 0).getTime())
+                .filter((insight: any) => {
+                  const key = `${insight.type}:${insight.value}`;
+                  if (seen.has(key)) return false;
+                  seen.add(key);
+                  return true;
+                })
+                .slice(0, 50);
               run("UPDATE clients SET metadata=?, updated_at=datetime('now') WHERE id=?", [JSON.stringify(meta), clientId]);
 
               if (entities.length > 0) console.log('[EmailWatcher] 📊 Extracted', entities.length, 'entities → client profile for', fromEmail);
@@ -330,7 +353,7 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
       // Deadline check is non-critical
     }
   };
-  setInterval(deadlineCheck, 300000); // Every 5 minutes
+  deadlineInterval = setInterval(deadlineCheck, 300000); // Every 5 minutes
   deadlineCheck(); // Run immediately on start
 
   console.log(`[EmailWatcher] ✅ Polling started — ${intervalMs}ms + deadline checker (5min)`);
@@ -339,7 +362,8 @@ export async function startEmailWatcher(cfg: EmailConfig, intervalMs = 15000, us
 export function stopEmailWatcher(): void {
   running = false;
   if (interval) { clearInterval(interval); interval = null; }
-  console.log('[EmailWatcher] Stopped');
+  if (deadlineInterval) { clearInterval(deadlineInterval); deadlineInterval = null; }
+  console.log('[EmailWatcher] Stopped (including deadline checker)');
 }
 
 function extractEmail(from: string): string {

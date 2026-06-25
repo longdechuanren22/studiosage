@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../utils/api';
 import { t } from '../i18n';
+import { useToast } from '../contexts/ToastContext';
+import { logError } from '../utils/error';
 
 interface Client {
   id: string; name: string; email: string; phone: string; wechat_id: string;
@@ -38,6 +40,7 @@ export default function Clients() {
   const [importing, setImporting] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchClients().then(() => {
@@ -50,7 +53,7 @@ export default function Clients() {
     try {
       const url = search ? `/api/clients?search=${encodeURIComponent(search)}` : '/api/clients';
       const data = await api.get<Client[]>(url); setClients(data);
-    } catch { /* network */ }
+    } catch (err) { logError('Clients.fetchClients', err); }
     finally { setLoading(false); }
   };
 
@@ -65,14 +68,15 @@ export default function Clients() {
         api.get<any>(`/api/clients/${id}/timeline`).catch(() => ({ timeline: [] })),
       ]);
       setDetail({ messages: data.messages || [], invoices: data.invoices || [], timeline: tl.timeline || [] });
-    } catch { /* offline */ }
+    } catch (err) { logError('Clients.openClient', err); }
   };
 
   const closeClient = () => { setSelectedId(null); setDetail(null); setSearchParams({}); };
 
   const handleSend = async (msgId: string) => {
     setSending(msgId);
-    try { await api.post(`/api/messages/${msgId}/send`); } catch {}
+    try { await api.post(`/api/messages/${msgId}/send`); toast('Reply sent', 'success'); openClient(selectedId!); }
+    catch (err: any) { toast(err.message || 'Send failed — please try again', 'error'); }
     setSending(null);
     if (selectedId) openClient(selectedId);
   };
@@ -80,14 +84,16 @@ export default function Clients() {
   const startEdit = (msg: Message) => { setEditing(msg.id); setEditText(msg.ai_reply || ''); };
 
   const saveDraft = async (msgId: string) => {
-    try { await api.patch(`/api/messages/${msgId}/reply`, { ai_reply: editText }); } catch {}
+    try { await api.patch(`/api/messages/${msgId}/reply`, { ai_reply: editText }); toast('Draft saved', 'success'); }
+    catch (err: any) { toast(err.message || 'Save failed — please try again', 'error'); }
     setEditing(null);
     if (selectedId) openClient(selectedId);
   };
 
   const createClient = async () => {
     if (!newClient.name) return;
-    try { await api.post('/api/clients', newClient); } catch {}
+    try { await api.post('/api/clients', newClient); toast('Client created', 'success'); }
+    catch (err: any) { toast(err.message || 'Create failed — please try again', 'error'); }
     setShowNewClient(false);
     setNewClient({ name: '', email: '', phone: '', wechat_id: '', type: '', notes: '' });
     fetchClients();
@@ -295,8 +301,8 @@ export default function Clients() {
                 headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
                 return obj;
               });
-              try { await api.post('/api/clients/import', { rows }); fetchClients(); }
-              catch {}
+              try { await api.post('/api/clients/import', { rows }); fetchClients(); toast('Import complete', 'success'); }
+              catch (err: any) { toast(err.message || 'Import failed', 'error'); }
               setImporting(false);
               e.target.value = '';
             }} />

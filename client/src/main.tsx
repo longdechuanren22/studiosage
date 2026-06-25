@@ -28,8 +28,7 @@ window.addEventListener('keydown', (e) => {
   switch (key) {
     case 'g': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/'; } break;
     case 'c': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/clients'; } break;
-    case 'i': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/invoices'; } break;
-    case 'p': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/proposals'; } break;
+    case 'p': if (e.ctrlKey || e.metaKey) { e.preventDefault(); window.location.href = '/sage/projects'; } break;
   }
 });
 

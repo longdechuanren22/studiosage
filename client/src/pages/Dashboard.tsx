@@ -5,6 +5,7 @@ import { useDemo } from '../components/Layout';
 import { api } from '../utils/api';
 import { t, tf } from '../i18n';
 import { platform, desktopNotify } from '../utils/platform';
+import { logError } from '../utils/error';
 
 interface DashboardData {
   stats: { pendingClients: number; newMessages: number; urgentCount: number; activeProjects: number; revenueThisMonth: number; };
@@ -28,38 +29,50 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const token = localStorage.getItem('studiosage_token');
-    if (!token) return;
+    const authToken = localStorage.getItem('studiosage_token');
+    if (!authToken) return;
 
     let es: EventSource;
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let reconnectDelay = 1000;
 
-    const connectSSE = () => {
-      es = new EventSource(`/api/dashboard/stream?token=${encodeURIComponent(token!)}`);
-      es.onmessage = () => fetchData();
-      es.addEventListener('message:new', () => fetchData());
-      es.addEventListener('message:replied', () => fetchData());
-      es.addEventListener('invoice:updated', () => fetchData());
-      es.addEventListener('client:updated', () => fetchData());
-      es.addEventListener('project:updated', (e: any) => {
-        fetchData();
-        if (platform.isDesktop()) {
-          try {
-            const d = JSON.parse(e.data);
-            const labels: Record<string, string> = {
-              selection: '选片中', editing: '精修中', review: '审核中', completed: '已完成', cancelled: '已取消',
-            };
-            desktopNotify('项目状态更新', `项目状态已变更为：${labels[d.status] || d.status}`);
-          } catch {}
-        }
-      });
-      es.onerror = () => {
-        es.close();
-        reconnectDelay = Math.min(reconnectDelay * 2, 30000); // 1s→2s→4s...max 30s
+    const connectSSE = async () => {
+      try {
+        // Fetch short-lived SSE token (5 min) instead of embedding long-lived JWT in URL
+        const res = await fetch('/api/dashboard/stream-token', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) return;
+        const { token: sseToken } = await res.json();
+        es = new EventSource(`/api/dashboard/stream?token=${encodeURIComponent(sseToken)}`);
+        es.onmessage = () => fetchData();
+        es.addEventListener('message:new', () => fetchData());
+        es.addEventListener('message:replied', () => fetchData());
+        es.addEventListener('invoice:updated', () => fetchData());
+        es.addEventListener('client:updated', () => fetchData());
+        es.addEventListener('project:updated', (e: any) => {
+          fetchData();
+          if (platform.isDesktop()) {
+            try {
+              const d = JSON.parse(e.data);
+              const labels: Record<string, string> = {
+                selection: '选片中', editing: '精修中', review: '审核中', completed: '已完成', cancelled: '已取消',
+              };
+              desktopNotify('项目状态更新', `项目状态已变更为：${labels[d.status] || d.status}`);
+            } catch {}
+          }
+        });
+        es.onerror = () => {
+          es.close();
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+          reconnectTimer = setTimeout(connectSSE, reconnectDelay);
+        };
+        es.onopen = () => { reconnectDelay = 1000; };
+      } catch {
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
         reconnectTimer = setTimeout(connectSSE, reconnectDelay);
-      };
-      es.onopen = () => { reconnectDelay = 1000; }; // Reset on success
+      }
     };
 
     connectSSE();
@@ -77,7 +90,7 @@ export default function Dashboard() {
         api.get<any>('/api/dashboard/analytics').catch(() => null),
       ]);
       setData(an ? { ...dash, analytics: an } : dash);
-    } catch {}
+    } catch (err) { logError('Dashboard.fetchData', err); }
     setLoading(false);
   };
 

@@ -3,6 +3,8 @@ import { useDemo } from '../components/Layout';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../utils/api';
+import { logError } from '../utils/error';
+import { t, tf } from '../i18n';
 
 interface Invoice {
   id: string; client_name: string; client_email: string;
@@ -33,7 +35,7 @@ export default function Invoices() {
     if (demo) { setInvoices(DEMO_INVOICES); setLoading(false); return; }
     api.get<{ invoices: Invoice[] }>('/api/invoices')
       .then(data => setInvoices(Array.isArray(data?.invoices) ? data.invoices : Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .catch((err) => { logError('Invoices.fetchInvoices', err); })
       .finally(() => setLoading(false));
   };
 
@@ -53,29 +55,29 @@ export default function Invoices() {
     setSendingId(inv.id);
     try {
       const data = await api.post<{ ok: boolean; invoice: Invoice }>(`/api/invoices/${inv.id}/send`);
-      toast('Invoice sent! Payment link generated', 'success');
+      toast(t('invoices.sent'), 'success');
       if (data.invoice) setInvoices(prev => prev.map(i => i.id === inv.id ? data.invoice : i));
       else fetchInvoices();
     } catch (err: any) {
-      toast(err.message || 'Send failed', 'error');
+      toast(err.message || t('invoices.sendFail'), 'error');
     } finally { setSendingId(null); }
   };
 
   const handleDelete = async (inv: Invoice) => {
-    if (demo) { setInvoices(prev => prev.filter(i => i.id !== inv.id)); toast('Deleted', 'info'); return; }
-    try { await api.del(`/api/invoices/${inv.id}`); toast('Invoice deleted', 'info'); fetchInvoices(); setSelectedId(null); }
-    catch (err: any) { toast(err.message || 'Delete failed', 'error'); }
+    if (demo) { setInvoices(prev => prev.filter(i => i.id !== inv.id)); toast(t('invoices.deleted'), 'info'); return; }
+    try { await api.del(`/api/invoices/${inv.id}`); toast(t('invoices.deleted'), 'info'); fetchInvoices(); setSelectedId(null); }
+    catch (err: any) { toast(err.message || t('invoices.networkErr'), 'error'); }
   };
 
   const handleCopyLink = (link: string) => {
     navigator.clipboard?.writeText(link).then(
-      () => toast('Payment link copied!', 'success'),
-      () => toast('Copy failed', 'error')
+      () => toast(t('shared.copied'), 'success'),
+      () => toast(t('shared.copy'), 'error')
     );
   };
 
   const handleDownloadPdf = async (inv: Invoice) => {
-    if (demo) { toast('Demo: PDF ready', 'info'); return; }
+    if (demo) { toast(t('invoices.demoPdf'), 'info'); return; }
     try {
       const token = localStorage.getItem('studiosage_token');
       const res = await fetch(`/api/invoices/${inv.id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
@@ -84,8 +86,8 @@ export default function Invoices() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `invoice-${inv.id.slice(0, 8)}.pdf`;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      toast('PDF downloading…', 'success');
-    } catch { toast('PDF download failed', 'error'); }
+      toast(t('invoices.pdfSuccess'), 'success');
+    } catch (err) { logError('Invoices.handleDownloadPdf', err); toast(t('invoices.pdfFail'), 'error'); }
   };
 
   const paid = invoices.filter(i => i.status === 'paid');
@@ -99,12 +101,12 @@ export default function Invoices() {
     return (
       <div>
         <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 13, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-          ← Back to Invoices
+          {t('invoices.back')}
         </button>
         <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', letterSpacing: '.4px', marginBottom: 4 }}>INVOICE #{inv.id.slice(0, 8).toUpperCase()}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', letterSpacing: '.4px', marginBottom: 4 }}>{t('invoices.detail.invoiceId').toUpperCase()} #{inv.id.slice(0, 8).toUpperCase()}</div>
               <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.3px', margin: 0 }}>{inv.description}</h2>
               <p style={{ fontSize: 13, color: '#86868B', margin: '4px 0 0' }}>{inv.client_name}{inv.client_email ? ` · ${inv.client_email}` : ''}</p>
             </div>
@@ -116,14 +118,14 @@ export default function Invoices() {
               {inv.currency === 'CNY' ? '¥' : '$'}{inv.amount.toLocaleString()}
             </div>
             <div style={{ fontSize: 12, color: '#AEAEB2', marginTop: 4 }}>
-              {inv.payment_schedule === 'three-phase' ? '3-Phase Payment · 50/25/25' : 'Full Payment'}
+              {t(`invoices.detail.paymentSchedule.${inv.payment_schedule}`) || inv.payment_schedule}
               {inv.retainer_type && <span style={{ marginLeft: 8, color: '#FF9500', fontWeight: 600 }}> · {inv.retainer_type}</span>}
             </div>
           </div>
 
           {inv.items && inv.items.length > 0 && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#86868B', marginBottom: 8 }}>Line Items</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#86868B', marginBottom: 8 }}>{t('invoices.detail.lineItems')}</div>
               {inv.items.map((item: any, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: i < inv.items!.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
                   <span style={{ color: '#555' }}>{item.description || `Item ${i + 1}`}</span>
@@ -136,30 +138,30 @@ export default function Invoices() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {inv.status === 'draft' && (
               <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id} style={primaryBtn}>
-                {sendingId === inv.id ? '⏳ Generating payment link…' : '📤 Send to Client'}
+                {sendingId === inv.id ? `⏳ ${t('invoices.sending')}` : `📤 ${t('invoices.send')}`}
               </button>
             )}
             {(inv.status === 'sent' || inv.status === 'paid') && inv.stripe_payment_link && (
               <>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => window.open(inv.stripe_payment_link!, '_blank')} style={{ ...primaryBtn, flex: 1 }}>💳 View in Stripe</button>
-                  <button onClick={() => handleCopyLink(inv.stripe_payment_link!)} style={{ ...secondaryBtn, flex: 1 }}>📋 Copy Link</button>
+                  <button onClick={() => window.open(inv.stripe_payment_link!, '_blank')} style={{ ...primaryBtn, flex: 1 }}>💳 {t('invoices.viewStripe')}</button>
+                  <button onClick={() => handleCopyLink(inv.stripe_payment_link!)} style={{ ...secondaryBtn, flex: 1 }}>📋 {t('invoices.copyLink')}</button>
                 </div>
                 {inv.status === 'sent' && (
-                  <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id} style={{ ...secondaryBtn, color: '#8E8E93' }}>🔄 Regenerate Payment Link</button>
+                  <button onClick={() => handleSend(inv)} disabled={sendingId === inv.id} style={{ ...secondaryBtn, color: '#8E8E93' }}>🔄 {t('invoices.regenLink')}</button>
                 )}
               </>
             )}
-            <button onClick={() => handleDownloadPdf(inv)} style={secondaryBtn}>🖨 Download PDF</button>
+            <button onClick={() => handleDownloadPdf(inv)} style={secondaryBtn}>🖨 {t('invoices.downloadPdf')}</button>
             {inv.status === 'draft' && (
-              <button onClick={() => handleDelete(inv)} style={{ ...secondaryBtn, color: '#FF3B30' }}>🗑 Delete Draft</button>
+              <button onClick={() => handleDelete(inv)} style={{ ...secondaryBtn, color: '#FF3B30' }}>🗑 {t('invoices.deleteDraft')}</button>
             )}
           </div>
 
           <div style={{ marginTop: 24, padding: '12px 16px', background: 'rgba(0,0,0,.02)', borderRadius: 10 }}>
             <div style={{ fontSize: 11, color: '#AEAEB2' }}>
-              Created {formatDate(inv.created_at)}
-              {inv.stripe_payment_link && <span style={{ marginLeft: 12 }}>Stripe Connected</span>}
+              {t('invoices.detail.createdAt')} {formatDate(inv.created_at)}
+              {inv.stripe_payment_link && <span style={{ marginLeft: 12 }}>{t('invoices.detail.stripeConnected')}</span>}
             </div>
           </div>
         </div>
@@ -171,24 +173,24 @@ export default function Invoices() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.5px', margin: 0 }}>Invoices</h2>
+          <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.5px', margin: 0 }}>{t('invoices.title')}</h2>
           <p style={{ fontSize: 14, color: '#86868B', margin: '4px 0 0' }}>
-            {invoices.length} invoices · Received <strong style={{ color: '#34C759' }}>${totalRevenue.toLocaleString()}</strong>
+            {tf('invoices.summary', { count: invoices.length, revenue: totalRevenue.toLocaleString() })}
             {pendingRevenue > 0 && <><span style={{ margin: '0 4px' }}>·</span> Pending <strong style={{ color: '#FF9500' }}>${pendingRevenue.toLocaleString()}</strong></>}
           </p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} style={{ padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: '#007AFF', color: '#fff', letterSpacing: '-.1px' }}>+ New</button>
+        <button onClick={() => setShowForm(!showForm)} style={{ padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: '#007AFF', color: '#fff', letterSpacing: '-.1px' }}>{t('invoices.new')}</button>
       </div>
 
       {showForm && <InvoiceForm onDone={() => { setShowForm(false); fetchInvoices(); }} toast={toast} />}
 
-      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#AEAEB2' }}>Loading…</div>}
+      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#AEAEB2' }}>{t('shared.loading')}</div>}
 
       {!loading && invoices.length === 0 && !showForm && (
         <div style={{ textAlign: 'center', padding: 48, background: '#fff', borderRadius: 16 }}>
           <div style={{ fontSize: 36, marginBottom: 8, opacity: .6 }}>📄</div>
-          <p style={{ fontSize: 15, fontWeight: 700 }}>No invoices yet</p>
-          <p style={{ fontSize: 13, color: '#86868B' }}>Create invoices to start billing your clients</p>
+          <p style={{ fontSize: 15, fontWeight: 700 }}>{t('invoices.noInvoices')}</p>
+          <p style={{ fontSize: 13, color: '#86868B' }}>{t('invoices.noInvoicesHint')}</p>
         </div>
       )}
 
@@ -228,14 +230,14 @@ export default function Invoices() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const m: Record<string, { bg: string; c: string; label: string }> = {
-    draft: { bg: 'rgba(142,142,147,.1)', c: '#8E8E93', label: 'Draft' },
-    sent: { bg: 'rgba(255,149,0,.1)', c: '#FF9500', label: 'Unpaid' },
-    paid: { bg: 'rgba(52,199,89,.1)', c: '#34C759', label: 'Paid' },
-    overdue: { bg: 'rgba(255,59,48,.1)', c: '#FF3B30', label: 'Overdue' },
+  const m: Record<string, { bg: string; c: string }> = {
+    draft: { bg: 'rgba(142,142,147,.1)', c: '#8E8E93' },
+    sent: { bg: 'rgba(255,149,0,.1)', c: '#FF9500' },
+    paid: { bg: 'rgba(52,199,89,.1)', c: '#34C759' },
+    overdue: { bg: 'rgba(255,59,48,.1)', c: '#FF3B30' },
   };
   const s = m[status] || m.draft;
-  return <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 12, background: s.bg, color: s.c, letterSpacing: '.4px', whiteSpace: 'nowrap' }}>{s.label}</span>;
+  return <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 12, background: s.bg, color: s.c, letterSpacing: '.4px', whiteSpace: 'nowrap' }}>{t(`invoices.status.${status}`) || t('invoices.status.draft')}</span>;
 }
 
 function InvoiceForm({ onDone, toast }: { onDone: () => void; toast: (msg: string, type?: 'success' | 'error' | 'info') => void }) {
@@ -244,47 +246,47 @@ function InvoiceForm({ onDone, toast }: { onDone: () => void; toast: (msg: strin
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.clientName || !form.amount) { toast('Please fill in client name and amount', 'error'); return; }
+    if (!form.clientName || !form.amount) { toast(t('invoices.form.fillRequired'), 'error'); return; }
     setSubmitting(true);
     try {
       await api.post('/api/invoices/generate', { clientName: form.clientName, clientEmail: form.clientEmail, packageType: form.packageType, amount: Number(form.amount), paymentSchedule: form.paymentSchedule, currency: 'USD' });
-      toast('Draft created!', 'success'); onDone();
-    } catch (err: any) { toast(err.message || 'Network error', 'error'); }
+      toast(t('invoices.form.draftCreated'), 'success'); onDone();
+    } catch (err: any) { toast(err.message || t('invoices.networkErr'), 'error'); }
     finally { setSubmitting(false); }
   };
 
   return (
     <form onSubmit={handleSubmit} style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 1px 3px rgba(0,0,0,.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>New Invoice</div>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{t('invoices.form.title')}</div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <Field label="Client Name *" value={form.clientName} onChange={v => setForm(p => ({ ...p, clientName: v }))} placeholder="Sarah & Mike" />
-        <Field label="Client Email" value={form.clientEmail} onChange={v => setForm(p => ({ ...p, clientEmail: v }))} placeholder="client@example.com" type="email" />
+        <Field label={t('invoices.form.clientName')} value={form.clientName} onChange={v => setForm(p => ({ ...p, clientName: v }))} placeholder="Sarah & Mike" />
+        <Field label={t('invoices.form.clientEmail')} value={form.clientEmail} onChange={v => setForm(p => ({ ...p, clientEmail: v }))} placeholder="client@example.com" type="email" />
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <label style={lbl}>Package Type</label>
+          <label style={lbl}>{t('invoices.form.packageType')}</label>
           <select value={form.packageType} onChange={e => setForm(p => ({ ...p, packageType: e.target.value }))} style={sel}>
-            <option value="wedding">Wedding</option>
-            <option value="portrait">Portrait</option>
-            <option value="event">Event</option>
-            <option value="commercial">Commercial</option>
-            <option value="other">Other</option>
+            <option value="wedding">{t('invoices.form.packages.wedding')}</option>
+            <option value="portrait">{t('invoices.form.packages.portrait')}</option>
+            <option value="event">{t('invoices.form.packages.event')}</option>
+            <option value="commercial">{t('invoices.form.packages.commercial')}</option>
+            <option value="other">{t('invoices.form.packages.other')}</option>
           </select>
         </div>
-        <Field label="Amount (USD) *" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} placeholder="4500" type="number" />
+        <Field label={t('invoices.form.amount')} value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} placeholder="4500" type="number" />
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <label style={lbl}>Payment Schedule</label>
+          <label style={lbl}>{t('invoices.form.paymentSchedule')}</label>
           <select value={form.paymentSchedule} onChange={e => setForm(p => ({ ...p, paymentSchedule: e.target.value }))} style={sel}>
-            <option value="three-phase">3-Phase (50/25/25)</option>
-            <option value="single">Full Payment</option>
+            <option value="three-phase">{t('invoices.form.schedules.three-phase')}</option>
+            <option value="single">{t('invoices.form.schedules.single')}</option>
           </select>
         </div>
         <div style={{ flex: 1 }} />
       </div>
       <button type="submit" disabled={submitting} style={{ width: '100%', padding: '12px', borderRadius: 14, fontSize: 14, fontWeight: 600, background: submitting ? '#AEAEB2' : '#007AFF', color: '#fff', border: 'none', cursor: submitting ? 'default' : 'pointer', letterSpacing: '-.1px' }}>
-        {submitting ? 'Creating…' : 'Create Draft'}
+        {submitting ? t('invoices.form.creating') : t('invoices.form.createBtn')}
       </button>
     </form>
   );

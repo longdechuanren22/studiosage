@@ -8,6 +8,7 @@ import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
 import Connect from './pages/Connect';
 import Invoices from './pages/Invoices';
+import Plans from './pages/Plans';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import PortalSelection from './pages/PortalSelection';
@@ -40,8 +41,10 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/clients" element={<Clients />} />
+                <Route path="/invoices" element={<Invoices />} />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/plans" element={<Plans />} />
                 <Route path="/connect" element={<Connect />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

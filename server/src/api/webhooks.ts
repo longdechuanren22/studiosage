@@ -28,10 +28,13 @@ router.post('/stripe', async (req, res) => {
       console.error('[Stripe Webhook] Signature verification failed:', err.message);
       return res.status(400).json({ error: 'Invalid signature' });
     }
-  } else {
-    // Dev mode: no webhook secret configured, trust req.body directly
+  } else if (process.env.NODE_ENV === 'development') {
+    // Dev mode only: no webhook secret configured, trust req.body directly
     console.warn('[Stripe Webhook] No STRIPE_WEBHOOK_SECRET — trusting raw body (dev only)');
     await handleEvent(req.body);
+  } else {
+    console.error('[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured in production!');
+    return res.status(500).json({ error: 'Webhook secret not configured' });
   }
 
   res.json({ received: true });

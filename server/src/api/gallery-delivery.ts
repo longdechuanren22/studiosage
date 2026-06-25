@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
 import { uploadToR2, deleteFromR2, getPublicUrl, isR2Enabled } from '../utils/storage.js';
+import { checkPhotoLimit } from '../middleware/paywall.js';
 
 const router: RouterType = Router();
 
@@ -89,7 +90,7 @@ router.get('/:id/gallery', async (req, res) => {
 });
 
 // ── Upload photos to gallery ──
-router.post('/:id/gallery/photos', async (req, res) => {
+router.post('/:id/gallery/photos', checkPhotoLimit, async (req, res) => {
   await initDb();
   const userId = req.userId!;
   const project = queryOne('SELECT id FROM projects WHERE id = ? AND user_id = ?', [req.params.id, userId]);
@@ -466,7 +467,9 @@ router.post('/:id/deliveries', async (req, res) => {
             deliveryNotified = true;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('[Delivery] Notification failed:', (err as Error).message);
+      }
 
       res.status(201).json({
         roundId,
