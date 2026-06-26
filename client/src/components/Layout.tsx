@@ -177,7 +177,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </header>
 
         <main className="pb-20 px-5 max-w-4xl mx-auto pt-6">
-          <div className="page-enter" key={location.pathname}>{children}</div>
+          <div className="page-enter" key={`${location.pathname}-${lang}`}>{children}</div>
         </main>
 
         <nav className="glass fixed bottom-0 left-0 right-0 z-50 border-t safe-area-bottom" style={{ borderColor: 'rgba(0,0,0,.06)' }}>
