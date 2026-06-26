@@ -170,8 +170,51 @@ export interface GenerateInvoiceParams {
 }
 
 export async function generateInvoiceData(params: GenerateInvoiceParams) {
-  // 🔒 安全：发票金额是合同——AI 不构造合同内容，完全用离线模板
-  return generateInvoiceOffline(params);
+  // 🔒 安全：金额和支付条款来自用户输入，AI 只生成行项目描述和发票备注
+  if (!USE_AI) return generateInvoiceOffline(params);
+
+  try {
+    const prompt = `You are a photography invoice assistant. Generate line items and a professional invoice description based on the package type.
+
+Package: ${params.packageType}
+Amount: ${params.currency || 'USD'} ${params.amount}
+Client: ${params.clientName}
+Notes: ${params.additionalNotes || 'none'}
+
+Output ONLY valid JSON with:
+{
+  "description": "Professional invoice title (e.g. 'Wedding Photography — Full Day Coverage')",
+  "items": [
+    {"description": "Line item description", "unitPrice": ${params.amount}, "quantity": 1}
+  ],
+  "retainerLabel": null or "Non-refundable retainer" if applicable
+}
+
+Keep line items concise. Total of all items must equal exactly ${params.amount}. Output JSON only, no markdown.`;
+
+    const text = await callAI(prompt, 250, 0.3);
+    const result = JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim());
+
+    // Validate total matches user's amount
+    const items = result.items || [];
+    const total = items.reduce((sum: number, item: any) => sum + ((item.unitPrice || 0) * (item.quantity || 1)), 0);
+    if (Math.abs(total - params.amount) > 0.01) {
+      // AI amount mismatch — fix items to match user amount
+      if (items.length > 0) {
+        items[0].unitPrice = params.amount;
+        items[0].quantity = 1;
+      }
+    }
+
+    return {
+      description: result.description || `${params.packageType} — ${params.clientName}`,
+      items: items.length > 0 ? items : generateInvoiceOffline(params).items,
+      retainerLabel: result.retainerLabel || null,
+    };
+  } catch (err) {
+    console.error('[AI] generateInvoiceData failed, using offline:', (err as Error).message);
+    return generateInvoiceOffline(params);
+  }
 }
 
 // ── 选片→修图→交付 AI 智能化 ──
@@ -344,8 +387,15 @@ Write a ${urgency} message in Chinese. Rules:
 Output the message text only, no JSON.`;
 
     const text = await callAI(prompt, 250, 0.5);
-    // 🔒 安全：AI 不直接写金额。金额从 DB 取，替换 AI 的占位符
-    return text.trim().replace('[金额]', `${ctx.currency || '¥'}${ctx.amount}`);
+    // 🔒 安全：金额来自 DB。替换 AI 占位符，若 AI 漏写则追加
+    const amountStr = `${ctx.currency || '¥'}${ctx.amount}`;
+    let result = text.trim();
+    if (result.includes('[金额]')) {
+      result = result.replace('[金额]', amountStr);
+    } else if (!result.includes(String(ctx.amount))) {
+      result = `${result}（${amountStr}）`;
+    }
+    return result;
   } catch (err) {
     console.error('[AI] draftPaymentReminder failed:', (err as Error).message);
     return draftPaymentTemplate(ctx);
