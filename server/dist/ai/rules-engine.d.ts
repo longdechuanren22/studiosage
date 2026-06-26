@@ -4,6 +4,9 @@ export interface ClassifyResult {
     suggestedReply: string;
     confidence: number;
     stage: string;
+    sentiment?: 'positive' | 'neutral' | 'anxious' | 'frustrated' | 'urgent';
+    pricingIntent?: boolean;
+    needsImmediateAttention?: boolean;
 }
 export interface InvoiceItem {
     description: string;

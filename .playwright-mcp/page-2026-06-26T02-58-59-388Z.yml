@@ -1,0 +1,24 @@
+- generic [ref=e27]:
+  - banner [ref=e28]:
+    - generic [ref=e29]:
+      - heading "StudioSage" [level=1] [ref=e32]
+      - generic [ref=e33]:
+        - button "🌙" [ref=e34] [cursor=pointer]
+        - button "中文" [ref=e35] [cursor=pointer]
+        - button [ref=e37] [cursor=pointer]
+  - main [ref=e38]:
+    - generic [ref=e40]: Loading…
+  - navigation [ref=e41]:
+    - generic [ref=e42]:
+      - link "◧Dashboard" [ref=e43] [cursor=pointer]:
+        - /url: /sage
+      - link "👥Clients" [ref=e44] [cursor=pointer]:
+        - /url: /sage/clients
+      - link "🎬Projects" [ref=e45] [cursor=pointer]:
+        - /url: /sage/projects
+      - link "📄Invoices" [ref=e46] [cursor=pointer]:
+        - /url: /sage/invoices
+      - link "📬Connect" [ref=e47] [cursor=pointer]:
+        - /url: /sage/connect
+      - link "⚙Settings" [ref=e48] [cursor=pointer]:
+        - /url: /sage/settings

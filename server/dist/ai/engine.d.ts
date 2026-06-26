@@ -16,6 +16,14 @@ interface ClientContext {
     galleryUploaded?: number;
     galleryTotal?: number;
     pendingInvoices?: number;
+    conversationMemory?: {
+        messageCount: number;
+        lastInteractionAt?: string;
+        recentSubjects: string[];
+        recentTopics: string[];
+        lastReplyAt?: string;
+        pendingSince?: string;
+    };
 }
 interface ClassifyResult {
     category: 'urgent' | 'normal' | 'spam';
@@ -23,6 +31,9 @@ interface ClassifyResult {
     suggestedReply: string;
     confidence: number;
     stage?: string;
+    sentiment?: 'positive' | 'neutral' | 'anxious' | 'frustrated' | 'urgent';
+    pricingIntent?: boolean;
+    needsImmediateAttention?: boolean;
 }
 export declare function callAI(prompt: string, maxTokens?: number, temp?: number): Promise<string>;
 export declare function classifyMessage(body: string, subject: string, ctx?: ClientContext): Promise<ClassifyResult>;
@@ -37,7 +48,22 @@ export interface GenerateInvoiceParams {
     paymentSchedule?: 'single' | 'three-phase';
     additionalNotes?: string;
 }
-export declare function generateInvoiceData(params: GenerateInvoiceParams): Promise<any>;
+export declare function generateInvoiceData(params: GenerateInvoiceParams): Promise<{
+    items: import("./rules-engine.js").InvoiceItem[];
+    subtotal: number;
+    retainerLabel: "non-refundable-retainer";
+    paymentSchedule: {
+        label: string;
+        amount: number;
+        dueDate: string;
+    }[];
+    notes: string;
+    taxNote: string;
+} | {
+    description: any;
+    items: any;
+    retainerLabel: any;
+}>;
 declare const REVISION_TYPES: readonly ["exposure", "color", "crop", "blemish", "background", "other"];
 type RevisionType = typeof REVISION_TYPES[number];
 interface RevisionClassifyResult {
@@ -89,4 +115,18 @@ interface ClarityResult {
  * "瘦一点→太瘦了" → ⚠️ subjective, asked to clarify
  */
 export declare function validateRevisionClarity(description: string): Promise<ClarityResult>;
+export declare function isBusinessEmail(subject: string, body: string, fromAddress: string): {
+    isBusiness: boolean;
+    reason?: string;
+};
+export interface EnhancedEntity {
+    type: 'date' | 'time' | 'location' | 'budget' | 'guest_count' | 'hours' | 'clothing' | 'makeup' | 'props' | 'style' | 'venue' | 'timeline';
+    value: string;
+    confidence: number;
+}
+/**
+ * Extract photography-specific entities from client messages
+ * Goes beyond budget/date to capture 服化道、风格、档期
+ */
+export declare function extractEnhancedEntities(subject: string, body: string): EnhancedEntity[];
 export {};

@@ -1,0 +1,25 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: S
+    - heading "Create your account" [level=1] [ref=e7]
+    - paragraph [ref=e8]: Start your 14-day free trial
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Name
+      - textbox "Your name" [active] [ref=e12]
+    - generic [ref=e13]:
+      - generic [ref=e14]: Email
+      - textbox "hello@studiosage.com" [ref=e15]
+    - generic [ref=e16]:
+      - generic [ref=e17]: Password
+      - textbox "Password must be at least 6 characters" [ref=e18]
+      - paragraph [ref=e19]: Password must be at least 6 characters
+    - button "Start Free Trial" [ref=e20] [cursor=pointer]
+    - paragraph [ref=e21]:
+      - text: Already have an account?
+      - link "Sign in" [ref=e22] [cursor=pointer]:
+        - /url: /sage/login
+  - generic [ref=e23]:
+    - generic [ref=e24]: 🤖 AI Auto-Classify
+    - generic [ref=e25]: 📧 IMAP Inbox
+    - generic [ref=e26]: 📋 Proposals

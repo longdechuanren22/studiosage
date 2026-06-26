@@ -7,7 +7,15 @@ const USE_AI = !!(DEEPSEEK_KEY || ANTHROPIC_KEY);
 // Track which model is active
 let activeModel = 'offline';
 let consecutiveFailures = 0;
+let lastFailureAt = 0;
+const AI_RECOVERY_COOLDOWN_MS = 300_000; // 5 minutes
 export function getAIStatus() {
+    // Auto-recover: if enough time has passed since last failure, try AI again
+    if (consecutiveFailures >= 3 && lastFailureAt > 0 && Date.now() - lastFailureAt > AI_RECOVERY_COOLDOWN_MS) {
+        consecutiveFailures = 0;
+        lastFailureAt = 0;
+        activeModel = 'offline';
+    }
     return {
         active: USE_AI,
         model: activeModel,
@@ -27,12 +35,13 @@ export async function callAI(prompt, maxTokens = 600, temp = 0.3) {
             const res = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-                body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: maxTokens, temperature: temp, messages: [{ role: 'user', content: prompt }] }),
+                body: JSON.stringify({ model: process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001', max_tokens: maxTokens, temperature: temp, messages: [{ role: 'user', content: prompt }] }),
             });
             if (res.ok) {
                 const data = await res.json();
                 activeModel = 'claude';
                 consecutiveFailures = 0;
+                lastFailureAt = 0;
                 return data.content[0].text;
             }
             console.error(`[AI] Claude returned ${res.status}, trying DeepSeek...`);
@@ -47,12 +56,13 @@ export async function callAI(prompt, maxTokens = 600, temp = 0.3) {
             const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_KEY}` },
-                body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature: temp }),
+                body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature: temp }),
             });
             if (res.ok) {
                 const data = await res.json();
                 activeModel = 'deepseek';
                 consecutiveFailures = 0;
+                lastFailureAt = 0;
                 return data.choices[0].message.content;
             }
             console.error(`[AI] DeepSeek returned ${res.status}`);
@@ -62,16 +72,55 @@ export async function callAI(prompt, maxTokens = 600, temp = 0.3) {
         }
     }
     consecutiveFailures++;
+    lastFailureAt = Date.now();
     activeModel = 'offline';
     throw new Error('All AI providers unavailable');
 }
 export async function classifyMessage(body, subject, ctx) {
     if (!USE_AI)
         return classifyOffline(body, subject, ctx);
+    // Build multi-turn conversation memory for context-aware replies
+    let memoryBlock = '';
+    if (ctx?.conversationMemory) {
+        const m = ctx.conversationMemory;
+        memoryBlock = [
+            `Conversation history: ${m.messageCount} messages total.`,
+            m.recentSubjects.length ? `Recent topics: ${m.recentSubjects.join(' | ')}` : '',
+            m.lastReplyAt ? `Photographer last replied: ${m.lastReplyAt}` : 'No reply sent yet.',
+            m.pendingSince ? `⛔ Client has been waiting since ${m.pendingSince} — needs reply.` : '',
+        ].filter(Boolean).join('\n');
+    }
+    const stageInfo = ctx
+        ? `Client: ${ctx.name || 'Unknown'}, Stage: ${ctx.stage || '?'}, Gallery: ${ctx.galleryUploaded || 0}/${ctx.galleryTotal || 0}`
+        : 'No context';
+    const prompt = `You are an AI assistant for a professional photographer. Analyze this client message:
+
+${memoryBlock}
+
+Client context: ${stageInfo}
+Subject: "${subject}"
+Message: "${body.slice(0, 3000)}"
+
+Return a JSON object:
+{
+  "category": "urgent" | "normal" | "spam",
+  "summary": "1-line summary in English",
+  "suggestedReply": "Professional, warm reply as if from the photographer. Keep under 150 chars.",
+  "confidence": 0.0-1.0,
+  "stage": "inquiry|engaged|booked|shooting|production|delivery|post_delivery",
+  "sentiment": "positive" | "neutral" | "anxious" | "frustrated" | "urgent",
+  "pricingIntent": true|false,
+  "needsImmediateAttention": true|false
+}
+
+Guidelines:
+- sentiment: "frustrated" if client seems upset/angry. "anxious" if worried about deadlines. "urgent" if time-critical.
+- pricingIntent: true if client is asking about prices, packages, or "how much"
+- needsImmediateAttention: true if sentiment is frustrated/urgent OR client has been waiting >48h
+- suggestedReply: if pricingIntent is true, don't quote prices. Instead offer to prepare a custom proposal.
+- Use conversation history to avoid repeating information the client already knows.`;
     try {
-        const stageInfo = ctx ? `Client: ${ctx.name || 'Unknown'}, Stage: ${ctx.stage || '?'}, Gallery: ${ctx.galleryUploaded || 0}/${ctx.galleryTotal || 0}` : 'No context';
-        const prompt = `Classify this photography client message. Context: ${stageInfo}\nSubject: "${subject}"\nMessage: "${body}"\nOutput JSON: {"category":"urgent|normal|spam","summary":"...","suggestedReply":"...","confidence":0.X,"stage":"inquiry|...|post_delivery"}`;
-        const text = await callAI(prompt, 600, 0.3);
+        const text = await callAI(prompt, 800, 0.3);
         return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
     }
     catch (err) {
@@ -80,12 +129,44 @@ export async function classifyMessage(body, subject, ctx) {
     }
 }
 export async function generateInvoiceData(params) {
+    // 🔒 安全：金额和支付条款来自用户输入，AI 只生成行项目描述和发票备注
     if (!USE_AI)
         return generateInvoiceOffline(params);
     try {
-        const prompt = `Generate photography invoice JSON. Input: ${JSON.stringify(params)}. Include line items, retainer label, 3-phase schedule if applicable.`;
-        const text = await callAI(prompt, 500, 0.2);
-        return JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, ''));
+        const prompt = `You are a photography invoice assistant. Generate line items and a professional invoice description based on the package type.
+
+Package: ${params.packageType}
+Amount: ${params.currency || 'USD'} ${params.amount}
+Client: ${params.clientName}
+Notes: ${params.additionalNotes || 'none'}
+
+Output ONLY valid JSON with:
+{
+  "description": "Professional invoice title (e.g. 'Wedding Photography — Full Day Coverage')",
+  "items": [
+    {"description": "Line item description", "unitPrice": ${params.amount}, "quantity": 1}
+  ],
+  "retainerLabel": null or "Non-refundable retainer" if applicable
+}
+
+Keep line items concise. Total of all items must equal exactly ${params.amount}. Output JSON only, no markdown.`;
+        const text = await callAI(prompt, 250, 0.3);
+        const result = JSON.parse(text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim());
+        // Validate total matches user's amount
+        const items = result.items || [];
+        const total = items.reduce((sum, item) => sum + ((item.unitPrice || 0) * (item.quantity || 1)), 0);
+        if (Math.abs(total - params.amount) > 0.01) {
+            // AI amount mismatch — fix items to match user amount
+            if (items.length > 0) {
+                items[0].unitPrice = params.amount;
+                items[0].quantity = 1;
+            }
+        }
+        return {
+            description: result.description || `${params.packageType} — ${params.clientName}`,
+            items: items.length > 0 ? items : generateInvoiceOffline(params).items,
+            retainerLabel: result.retainerLabel || null,
+        };
     }
     catch (err) {
         console.error('[AI] generateInvoiceData failed, using offline:', err.message);
@@ -206,25 +287,33 @@ export async function draftPaymentReminder(ctx) {
             : ctx.daysOverdue <= 7 ? 'polite but firm payment request, 7 days overdue'
                 : ctx.daysOverdue <= 30 ? 'formal payment demand, getting serious'
                     : 'final notice before potential legal action';
-        const prompt = `You are a photographer who needs to ask a client for payment. The key requirement: maintain professionalism and warmth — NEVER sound like debt collection.
+        const prompt = `You are a photographer reminding a client about a payment. The key requirement: maintain professionalism and warmth — NEVER sound like debt collection.
 
 Context:
 - Client: ${ctx.clientName}
 - Project: ${ctx.projectTitle}
-- Amount: ${ctx.currency || '¥'}${ctx.amount}
-- Payment: ${ctx.paymentType}
+- Payment type: ${ctx.paymentType}
 - Days since due: ${ctx.daysOverdue} (${urgency})
 
 Write a ${urgency} message in Chinese. Rules:
-- Keep under 120 characters
+- Keep under 100 characters
 - Never use aggressive language (讨债语气)
 - Frame it as a "friendly reminder" even when late
-- Include payment amount naturally
+- Use [金额] as a placeholder for the payment amount (do NOT write a specific number)
 - End with [摄影师姓名]
 
 Output the message text only, no JSON.`;
         const text = await callAI(prompt, 250, 0.5);
-        return text.trim();
+        // 🔒 安全：金额来自 DB。替换 AI 占位符，若 AI 漏写则追加
+        const amountStr = `${ctx.currency || '¥'}${ctx.amount}`;
+        let result = text.trim();
+        if (result.includes('[金额]')) {
+            result = result.replace('[金额]', amountStr);
+        }
+        else if (!result.includes(String(ctx.amount))) {
+            result = `${result}（${amountStr}）`;
+        }
+        return result;
     }
     catch (err) {
         console.error('[AI] draftPaymentReminder failed:', err.message);
@@ -300,4 +389,189 @@ function validateClarityOffline(description) {
     }
     // Looks specific enough — classify
     return { isSpecific: true, suggestedType: classifyRevisionOffline(d).revisionType };
+}
+// ── 非业务邮件识别 — 不属于摄影业务的邮件直接过滤 ──
+const NON_BUSINESS_PATTERNS = [
+    // 社交媒体通知
+    /facebook.*(notif|mention|follow|like|comment|friend|request)/i,
+    /instagram.*(notif|mention|follow|like|comment|story)/i,
+    /linkedin.*(invitation|connect|request|notif|viewed|appeared)/i,
+    /twitter.*(notif|mention|follow|retweet)/i,
+    /tiktok.*(notif|message|follow)/i,
+    /pinterest.*(notif|pin|board)/i,
+    /snapchat/i,
+    // 银行/金融
+    /bank.*statement|transaction.*alert|balance.*update|credit.*card.*statement/i,
+    /paypal.*receipt|venmo.*notif|cash.*app.*notif/i,
+    /your.*bill.*is.*ready|payment.*received.*thank/i,
+    // 快递/订单
+    /order.*confirm|ship.*confirm|tracking.*number|your.*order.*#/i,
+    /amazon\.com.*order|package.*delivered|delivery.*update/i,
+    /receipt.*from|thank.*you.*for.*your.*purchase|invoice.*#/i,
+    // 软件订阅
+    /subscription.*renew|your.*subscription|trial.*ending|plan.*upgrade/i,
+    /billing.*receipt|payment.*receipt.*#/i,
+    // 垃圾/广告
+    /newsletter|weekly.*digest|monthly.*roundup|webinar|free.*ebook/i,
+    /limited.*time.*offer|act.*now|don't.*miss.*out|exclusive.*deal/i,
+    /sale.*off|discount.*code|promo.*code|clearance/i,
+    /SEO.*audit|backlink|guest.*post|sponsor|traffic.*to.*your/i,
+    // 系统通知
+    /password.*reset.*request|verify.*your.*email|confirm.*your.*account/i,
+    /security.*alert.*login|new.*sign.*in|unusual.*activity/i,
+    /do.*not.*reply.*automated|noreply|no-reply|donotreply/i,
+    /mailer.*daemon|undelivered.*mail|delivery.*status.*notification/i,
+    // 非摄影类咨询
+    /website.*design|SEO.*services|app.*development|virtual.*assistant/i,
+    /life.*insurance|health.*insurance|car.*insurance/i,
+    // TikTok Shop /电商
+    /tiktok.*shop|tiktok.*order|tiktok.*seller|etsy.*order|shopify.*order/i,
+    /your.*shop.*order|new.*order.*#|order.*confirmed.*#/i,
+    /aliexpress|temu|shein.*order|wish.*order/i,
+];
+export function isBusinessEmail(subject, body, fromAddress) {
+    const text = (subject + ' ' + body.slice(0, 1000) + ' ' + fromAddress).toLowerCase();
+    for (const pattern of NON_BUSINESS_PATTERNS) {
+        if (pattern.test(text)) {
+            return { isBusiness: false, reason: 'non-business notification or automated email' };
+        }
+    }
+    // 🔄 修复：不再要求摄影关键词。来自个人邮箱的邮件一律视为潜在客户。
+    const isPersonalSender = /@(gmail\.com|outlook\.com|yahoo\.com|hotmail\.com|qq\.com|163\.com|126\.com|icloud\.com|proton\.me|protonmail\.com|mail\.com|zoho\.com|fastmail\.com)$/i.test(fromAddress);
+    if (isPersonalSender) {
+        return { isBusiness: true };
+    }
+    // 企业域名 → 需要至少一个业务信号
+    const bizSignals = [
+        /photograph|photo|shoot|wedding|portrait|headshot/i,
+        /picture|image|gallery|album|print|retouch|edit/i,
+        /booking|schedule|date|availability|package|pricing|quote|rate/i,
+        /contract|invoice|deposit|retainer/i,
+        /bride|groom|ceremony|reception|engagement|elopement/i,
+        /maternity|newborn|family.*photo|graduation/i,
+        /\b拍摄\b|\b拍照\b|\b摄影\b|\b写真\b|\b婚纱\b|\b婚礼\b|\b跟拍\b/i,
+        /\b修图\b|\b精修\b|\b底片\b|\b样片\b|\b选片\b/i,
+        /how much|price|cost|available|inquiry|interest|services/i,
+    ];
+    if (bizSignals.some(p => p.test(text))) {
+        return { isBusiness: true };
+    }
+    return { isBusiness: false, reason: 'corporate domain without photography-related content' };
+}
+/**
+ * Extract photography-specific entities from client messages
+ * Goes beyond budget/date to capture 服化道、风格、档期
+ */
+export function extractEnhancedEntities(subject, body) {
+    const text = (subject + ' ' + body).toLowerCase();
+    const entities = [];
+    // ── 日期 ──
+    const datePatterns = [
+        /(\d{4}[-/]\d{1,2}[-/]\d{1,2})/,
+        /(\d{1,2}月\d{1,2}[日号])/,
+        /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*\d{4}/i,
+    ];
+    for (const p of datePatterns) {
+        const m = text.match(p);
+        if (m) {
+            entities.push({ type: 'date', value: m[1], confidence: 0.9 });
+            break;
+        }
+    }
+    // ── 时间/时段 ──
+    const timePatterns = [
+        /(\d{1,2}:\d{2})\s*(?:am|pm|上午|下午)?/i,
+        /(?:早上|上午|中午|下午|傍晚|晚上)(\d{1,2}[点時])?/,
+        /(?:at|from)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i,
+    ];
+    for (const p of timePatterns) {
+        const m = text.match(p);
+        if (m) {
+            entities.push({ type: 'time', value: m[1] || m[0], confidence: 0.85 });
+            break;
+        }
+    }
+    // ── 服装 (Clothing) ──
+    const clothingPatterns = [
+        [/婚纱|wedding.*dress|白纱|礼服|gown|tuxedo|suit|西装|旗袍|汉服|和服/i, 'formal attire mentioned'],
+        [/伴娘.*服|bridesmaid.*dress/i, 'bridesmaid dresses'],
+        [/便装|causal|休闲/i, 'casual wear preferred'],
+        [/多套.*衣服|换.*套|(\d+).*套.*衣服|(\d+).*outfits/i, '$1 outfits'],
+    ];
+    for (const [p, label] of clothingPatterns) {
+        const m = text.match(p);
+        if (m) {
+            const value = label.replace(/\$(\d+)/g, (_, i) => m[parseInt(i)] || '');
+            entities.push({ type: 'clothing', value, confidence: 0.8 });
+            break;
+        }
+    }
+    // ── 化妆造型 (Makeup) ──
+    if (/化妆|makeup|造型|发型|hair.*stylist|妆面|粉底|眼影|口红/i.test(text)) {
+        const detail = text.match(/化妆.*?(?:。|\.|$)|makeup.*?(?:\.|$)|造型.*?(?:。|\.|$)/i)?.[0] || 'makeup requested';
+        entities.push({ type: 'makeup', value: detail.slice(0, 60), confidence: 0.8 });
+    }
+    // ── 道具 (Props) ──
+    if (/道具|props|气球|balloon|花束|bouquet|烛台|candle|牌子|sign|横幅|banner|烟花|sparkler|泡泡|bubble/i.test(text)) {
+        const props = text.match(/道具.*?(?:。|\.|$)|props.*?(?:\.|$)|气球|balloon|花束|bouquet|烟花|sparkler/gi);
+        entities.push({ type: 'props', value: props?.[0]?.slice(0, 60) || 'props mentioned', confidence: 0.75 });
+    }
+    // ── 拍摄风格 (Style) ──
+    const styleMap = [
+        [/复古|vintage|retro|胶片|film.*style/i, 'vintage/film'],
+        [/小清新|清新|自然|natural.*light|户外|outdoor|森系/i, 'natural/outdoor'],
+        [/大片|时尚|fashion|杂志|magazine|editorial/i, 'fashion/editorial'],
+        [/纪实|documentary|抓拍|candid|journalistic/i, 'documentary/candid'],
+        [/韩式|korean.*style|日系|japanese.*style/i, 'korean/japanese style'],
+        [/黑白|black.*white|暗黑|dark.*moody/i, 'black&white/moody'],
+        [/明亮|bright.*airy|light.*airy|高调/i, 'bright & airy'],
+    ];
+    for (const [p, label] of styleMap) {
+        if (p.test(text)) {
+            entities.push({ type: 'style', value: label, confidence: 0.8 });
+            break;
+        }
+    }
+    // ── 场地 (Venue) ──
+    const venuePatterns = [
+        /venue.*?(?:is|at|name|called)\s+["']?([^"',.]+)["']?/i,
+        /在\s*(.{2,10}?(?:酒店|庄园|草坪|海滩|教堂|工作室|studio))\s*(?:举办|拍摄|举行)/,
+        /(?:at|@)\s+(.{2,20}?(?:hotel|resort|farm|beach|garden|studio|park))/i,
+    ];
+    for (const p of venuePatterns) {
+        const m = text.match(p);
+        if (m) {
+            entities.push({ type: 'venue', value: m[1].trim(), confidence: 0.85 });
+            break;
+        }
+    }
+    // ── 档期流程 (Timeline) ──
+    const timelineItems = [];
+    if (/first.*look|first.*see|仪式前|婚礼前.*见面/i.test(text))
+        timelineItems.push('first look');
+    if (/ceremony|仪式|交换.*戒指|vows/i.test(text))
+        timelineItems.push('ceremony');
+    if (/reception|宴会|晚宴|酒席|dinner|cocktail/i.test(text))
+        timelineItems.push('reception');
+    if (/getting.*ready|化妆.*准备|prep/i.test(text))
+        timelineItems.push('getting ready');
+    if (/portrait.*session|formal.*photo|合影|合照/i.test(text))
+        timelineItems.push('formal portraits');
+    if (/send.*off|退场|exit|sparkler.*exit/i.test(text))
+        timelineItems.push('send-off');
+    if (/cake.*cutting|切蛋糕|first.*dance|第一支舞/i.test(text))
+        timelineItems.push('cake/dance');
+    if (timelineItems.length > 0) {
+        entities.push({ type: 'timeline', value: timelineItems.join(', '), confidence: 0.7 });
+    }
+    // ── 人数 ──
+    const guestPatterns = [/(\d+)\s*(?:guests?|people|persons|位|人|个)/i, /guests?.*?(\d+)/i];
+    for (const p of guestPatterns) {
+        const m = text.match(p);
+        if (m) {
+            entities.push({ type: 'guest_count', value: m[1], confidence: 0.8 });
+            break;
+        }
+    }
+    return entities;
 }

@@ -3,9 +3,9 @@ import { v4 as uuid } from 'uuid';
 import { initDb } from '../db/schema.js';
 import { queryAll, queryOne, run } from '../db/query.js';
 import { classifyMessage } from '../ai/engine.js';
-import { extractEntities } from '../ai/rules-engine.js';
 import { sendReply } from '../adapters/email.js';
 import { decrypt } from '../utils/crypto.js';
+import { checkAI } from '../middleware/paywall.js';
 const router = Router();
 const uuidv4 = () => uuid();
 // Get inbox messages from DB (populated by email-watcher)
@@ -32,7 +32,7 @@ router.get('/stats', async (req, res) => {
     res.json({ newMessages: newCount, repliedCount, urgentCount, totalCount });
 });
 // Incoming message — used by email watcher AND as a public API
-router.post('/incoming', async (req, res) => {
+router.post('/incoming', checkAI, async (req, res) => {
     await initDb();
     const userId = req.userId;
     const { from, subject, body, clientId } = req.body;
@@ -51,13 +51,7 @@ router.post('/incoming', async (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, userId, clientId || null, from || '', subject || '', body || '',
         classification.category, isSpam ? 'archived' : 'pending',
         isSpam ? '' : classification.suggestedReply, new Date().toISOString()]);
-    // Extract entities and store insights
-    const entities = extractEntities(body, subject || '');
-    for (const entity of entities) {
-        run(`INSERT INTO client_insights (id, user_id, client_id, message_id, type, value, raw_text)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`, [uuidv4(), userId, clientId || null, id, entity.type, entity.value, entity.raw]);
-    }
-    res.json({ id, ...classification, isSpam, entities: entities.length });
+    res.json({ id, ...classification, isSpam });
 });
 // Update AI reply (user edits the draft)
 router.patch('/:id/reply', async (req, res) => {
@@ -85,8 +79,23 @@ router.post('/:id/send', async (req, res) => {
     const connData = conn;
     const cfg = JSON.parse(connData.access_token_encrypted || '{}');
     const password = connData.refresh_token_encrypted ? decrypt(connData.refresh_token_encrypted) : '';
+    // 🔒 安全：AI草稿必须人工确认后才能发送
+    const { confirmDraft } = req.body;
+    if (!customText && msgData.ai_reply && !confirmDraft) {
+        return res.status(400).json({
+            error: 'AI生成的回复需要人工确认。请编辑后发送，或添加 confirmDraft 标记。',
+            code: 'AI_DRAFT_CONFIRMATION_REQUIRED',
+        });
+    }
     const replyText = customText || msgData.ai_reply || '';
     const subject = msgData.subject || '';
+    // 🔒 安全：扫描AI生成内容中的金额关键词
+    if (!customText && msgData.ai_reply) {
+        const moneyPattern = /\$\d{1,6}(,\d{3})*(\.\d{2})?|USD\s*\d+|价格|费用|报价|打折|优惠|折扣|free|charge|fee|price|cost/i;
+        if (moneyPattern.test(msgData.ai_reply)) {
+            console.warn('[Send] ⚠️ AI reply contains price/amount keywords — photographer should review:', msgData.subject);
+        }
+    }
     try {
         await sendReply({ ...cfg, password }, msgData.from_address, subject, replyText);
         run('UPDATE messages SET status = ?, ai_reply = ? WHERE id = ? AND user_id = ?', ['replied', replyText, id, userId]);

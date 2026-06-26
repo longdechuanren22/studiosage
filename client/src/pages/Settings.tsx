@@ -74,21 +74,25 @@ export default function Settings() {
     localStorage.setItem(`studiosage_${key}`, value ? '1' : '0');
   };
 
-  // Platform services — managed by StudioSage, visible to customer as status
+  // Platform services — live status from API
   const platformServices = [
     {
-      key: 'ai', icon: '🤖', label: 'AI Assistant',
-      desc: status?.ai?.configured ? t('settings.aiDescActive') : t('settings.aiDescInactive'),
-      active: status?.ai?.configured,
-      activeLabel: t('settings.active'), inactiveLabel: t('settings.offlineMode'),
+      key: 'ai', icon: '🤖', label: 'AI Engine',
+      desc: status?.ai?.configured
+        ? (status.ai.model === 'offline'
+          ? `Offline mode — ${status.ai.providers?.claude ? 'Claude' : ''}${status.ai.providers?.claude && status.ai.providers?.deepseek ? ' + ' : ''}${status.ai.providers?.deepseek ? 'DeepSeek' : ''} configured, using offline rules`
+          : `Online — ${status.ai.model || 'AI'} active`)
+        : t('settings.aiDescInactive'),
+      active: status?.ai?.configured && status?.ai?.model !== 'offline',
+      activeLabel: 'Online', inactiveLabel: status?.ai?.configured ? 'Offline' : t('settings.setupRequired'),
     },
     {
-      key: 'subscription', icon: '💳', label: 'Subscription',
-      desc: status?.stripe?.configured
-        ? 'Manage your StudioSage plan and billing.'
-        : 'Stripe is being configured.',
+      key: 'subscription', icon: '💳', label: 'Stripe',
+      desc: planInfo
+        ? `${planInfo.planName} plan · ${planInfo.usage.projects}/${planInfo.limits.projects === Infinity ? '∞' : planInfo.limits.projects} projects · ${planInfo.usage.photos}/${planInfo.limits.photos === Infinity ? '∞' : planInfo.limits.photos} photos${planInfo.hasAI ? ' · AI included' : ' · AI not included'}`
+        : (status?.stripe?.configured ? 'Stripe connected' : 'Stripe not configured'),
       active: status?.stripe?.configured,
-      activeLabel: t('settings.active'), inactiveLabel: t('settings.setupRequired'),
+      activeLabel: t('settings.connected'), inactiveLabel: t('settings.notConnected'),
     },
   ];
 

@@ -18,15 +18,57 @@ import { healthRoutes } from './api/health.js';
 import { demoRoutes } from './api/demo.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
 import { securityHeaders, apiLimiter, authLimiter } from './middleware/security.js';
+import { requestId } from './middleware/request-id.js';
 import { emailConnectRoutes } from './api/email-connect.js';
 import { portalRoutes } from './api/portal.js';
 import { projectRoutes } from './api/projects.js';
 import { galleryDeliveryRoutes } from './api/gallery-delivery.js';
 import { billingRoutes } from './api/billing.js';
 import { logger } from './utils/logger.js';
+import { captureException } from './utils/sentry.js';
+// ── Startup environment validation (fail-fast on missing critical config) ──
+function validateEnv() {
+    const required = ['JWT_SECRET'];
+    const missing = required.filter(k => !process.env[k]);
+    if (missing.length) {
+        logger.error(`Missing required environment variables: ${missing.join(', ')}`);
+        process.exit(1);
+    }
+    // ENCRYPTION_KEY is required (crypto.ts will throw, but catch early)
+    const encKey = process.env.ENCRYPTION_KEY;
+    if (!encKey || encKey.length < 32) {
+        logger.error('ENCRYPTION_KEY must be set and at least 32 characters');
+        process.exit(1);
+    }
+    // STRIPE_WEBHOOK_SECRET: warn in dev, required in production
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+        if (process.env.NODE_ENV === 'production') {
+            logger.error('STRIPE_WEBHOOK_SECRET must be set in production');
+            process.exit(1);
+        }
+        logger.warn('STRIPE_WEBHOOK_SECRET not set — webhook signature verification disabled (dev only)');
+    }
+    // Optional but important — warn if missing
+    if (!process.env.ANTHROPIC_API_KEY && !process.env.DEEPSEEK_API_KEY) {
+        logger.warn('No AI API key configured (ANTHROPIC_API_KEY or DEEPSEEK_API_KEY). AI features will use offline rules only.');
+    }
+    if (!process.env.STRIPE_SECRET_KEY) {
+        logger.warn('STRIPE_SECRET_KEY not set — billing features disabled');
+    }
+    if (process.env.SENTRY_DSN) {
+        logger.info('Sentry error monitoring enabled');
+    }
+    else {
+        logger.info('SENTRY_DSN not set — error monitoring disabled (set SENTRY_DSN to enable)');
+    }
+    logger.info('Environment validation passed');
+}
+validateEnv();
 const app = express();
 const PORT = process.env.PORT || 3001;
 initDb().catch(err => { logger.error('DB init failed:', err); process.exit(1); });
+// Trust reverse proxy for accurate client IPs (rate limiting, logging)
+app.set('trust proxy', 1);
 // Auto-start email watcher if config exists in DB
 async function tryStartEmailWatcher() {
     try {
@@ -41,7 +83,7 @@ async function tryStartEmailWatcher() {
             if (cfg.email) {
                 const { startEmailWatcher } = await import('./workers/email-watcher.js');
                 startEmailWatcher({ ...cfg, password }, 15000, conn.user_id);
-                logger.info(`Auto-started email watcher for ${cfg.email}`);
+                logger.info(`Auto-started email watcher (polling ${cfg.email})`);
             }
         }
     }
@@ -50,6 +92,7 @@ async function tryStartEmailWatcher() {
     }
 }
 setTimeout(tryStartEmailWatcher, 2000);
+app.use(requestId);
 app.use(securityHeaders);
 app.use(apiLimiter);
 app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
@@ -58,7 +101,7 @@ app.use(express.json({ limit: '1mb' }));
 const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
 if (!fs.existsSync(uploadsDir))
     fs.mkdirSync(uploadsDir, { recursive: true });
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', authenticate, express.static(uploadsDir));
 // ── Public routes (no auth required) ──
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/health', healthRoutes);
@@ -68,7 +111,7 @@ app.use('/api/portal', portalRoutes); // client portal — 选片/审核/消息/
 // ── Protected routes (JWT required) ──
 app.use('/api/messages', authenticate, messageRoutes);
 app.use('/api/invoices', authenticate, invoiceRoutes);
-// SSE stream — token via query param
+// SSE stream — token via query param (EventSource API doesn't support custom headers)
 app.get('/api/dashboard/stream', async (req, res) => {
     const token = req.query.token;
     if (!token) {
@@ -82,10 +125,24 @@ app.get('/api/dashboard/stream', async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.flushHeaders();
         subscribe(payload.userId, res);
+        // Send keepalive every 45s to prevent proxy timeout
+        const keepalive = setInterval(() => { try {
+            res.write(':keepalive\n\n');
+        }
+        catch {
+            clearInterval(keepalive);
+        } }, 45000);
+        res.on('close', () => clearInterval(keepalive));
     }
     catch {
         res.status(401).json({ error: 'Invalid token' });
     }
+});
+// Short-lived SSE token endpoint (avoids long-lived JWT in URL)
+app.post('/api/dashboard/stream-token', authenticate, async (req, res) => {
+    const { signToken } = await import('./middleware/auth.js');
+    const sseToken = signToken({ userId: req.userId, email: req.userEmail }, '5m');
+    res.json({ token: sseToken });
 });
 app.use('/api/dashboard', authenticate, dashboardRoutes);
 app.use('/api/settings', authenticate, settingsRoutes);
@@ -98,16 +155,42 @@ app.use('/api/billing', billingRoutes);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
-    app.use(express.static(clientDist));
-    app.get('*', (_req, res, next) => { try {
-        res.sendFile(path.join(clientDist, 'index.html'));
-    }
-    catch {
-        next();
-    } });
+    app.use('/sage', express.static(clientDist));
+    app.get('/sage/*', (_req, res) => { res.sendFile(path.join(clientDist, 'index.html')); });
+    app.get('/', (_req, res) => { res.redirect('/sage/'); });
 }
 app.use(notFound);
 app.use(errorHandler);
+// Crash protection — log, report to Sentry, then exit so Docker restarts
+process.on('uncaughtException', (err) => {
+    logger.error('UNCAUGHT EXCEPTION — shutting down:', err.message, err.stack?.split('\n').slice(0, 3).join(' | '));
+    captureException(err, { type: 'uncaughtException' });
+    setTimeout(() => process.exit(1), 500);
+});
+process.on('unhandledRejection', (reason) => {
+    logger.error('UNHANDLED REJECTION:', reason);
+    captureException(reason instanceof Error ? reason : String(reason), { type: 'unhandledRejection' });
+    setTimeout(() => process.exit(1), 500);
+});
 app.listen(PORT, () => {
     logger.info(`StudioSage API running on http://localhost:${PORT}`);
+});
+// Graceful shutdown — close IMAP IDLE connections
+process.on('SIGTERM', async () => {
+    logger.info('SIGTERM received — shutting down email watchers');
+    try {
+        const { stopEmailWatcher } = await import('./workers/email-watcher.js');
+        stopEmailWatcher();
+    }
+    catch { }
+    process.exit(0);
+});
+process.on('SIGINT', async () => {
+    logger.info('SIGINT received — shutting down email watchers');
+    try {
+        const { stopEmailWatcher } = await import('./workers/email-watcher.js');
+        stopEmailWatcher();
+    }
+    catch { }
+    process.exit(0);
 });

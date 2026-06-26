@@ -1,0 +1,8 @@
+[     384ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ https://hzlmagent.com/sage/assets/index-DGIktI3W.js:202
+[     386ms] [WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ https://hzlmagent.com/sage/assets/index-DGIktI3W.js:223
+[     386ms] [WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ https://hzlmagent.com/sage/assets/index-DGIktI3W.js:223
+[     599ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://hzlmagent.com/icon-192.png:0
+[     599ms] [WARNING] Error while trying to use the following icon from the Manifest: https://hzlmagent.com/icon-192.png (Download error or resource isn't a valid image) @ https://hzlmagent.com/sage/settings:0
+[    1209ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.gravatar.com/avatar/ba08aee52be080c1fb44436e982ab7a1?d=404&s=60:0
+[    1275ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://hzlmagent.com/sage/settings:0
+[    1275ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://hzlmagent.com/sage/settings:0
